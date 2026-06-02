@@ -1,6 +1,6 @@
 import numpy as np
-from graph.graph_data import GraphData
-from embeddings.transe_loader import TransELoader
+from src.graph.graph_data import GraphData
+from src.embeddings.transe_loader import TransELoader
 
 # Builds GIFT entity graph using NELL TransE embeddings and cosine similarity
 # Produces G_e = {V_e, X_e, A_e}

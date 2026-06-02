@@ -1,6 +1,6 @@
-from graph.graph_data import GraphData
-from graph.pmi import PMIBuilder
-from embeddings.glove_loader import GloveLoader
+from src.graph.graph_data import GraphData
+from src.graph.pmi import PMIBuilder
+from src.embeddings.glove_loader import GloveLoader
 
 # Builds GIFT word graph using GloVe features and PMI adjacency
 # Produces G_w = {V_w, X_w, A_w}

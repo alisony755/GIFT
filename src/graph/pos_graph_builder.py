@@ -1,6 +1,6 @@
 import numpy as np
-from graph.graph_data import GraphData
-from graph.pmi import PMIBuilder
+from src.graph.graph_data import GraphData
+from src.graph.pmi import PMIBuilder
 
 # Builds GIFT POS graph using one-hot features and PMI adjacency
 # Produces G_p = {V_p, X_p, A_p}
