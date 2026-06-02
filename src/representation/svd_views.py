@@ -20,7 +20,7 @@ class SVDViewGenerator:
     def build_augmented_matrix(self, M):
         U, S, Vt = self.svd(M)
 
-        r = max(1, int(len(S) * self.rank_ratio))
+        r = max(1, int(S.shape[0] * self.rank_ratio))
         U_r, S_r, Vt_r = self.truncate(U, S, Vt, r)
 
         M_r = self.reconstruct(U_r, S_r, Vt_r)
