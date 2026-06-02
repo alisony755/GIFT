@@ -6,6 +6,7 @@ class Classifier(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_classes ):
         super().__init__()
 
+        # Converts text embeddings into predicted class probabilities
         self.network = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),

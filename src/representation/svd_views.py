@@ -1,5 +1,6 @@
 import numpy as np
 
+# Truncated SVD view generation
 class SVDViewGenerator:
     def __init__(self, rank_ratio=0.1):
         self.rank_ratio = rank_ratio
