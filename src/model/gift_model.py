@@ -4,6 +4,7 @@ import torch.nn as nn
 from src.contrastive.projection_head import ProjectionHead
 from src.contrastive.contrastive_loss import ContrastiveLoss
 from src.contrastive.cluster_contrastive_loss import ClusterContrastiveLoss
+from src.losses.cross_entropy_loss import cross_entropy
 from src.model.classifier import Classifier
 
 # Full GIFT objective
@@ -55,7 +56,7 @@ class GIFTModel(nn.Module):
         self.cluster_loss = (ClusterContrastiveLoss(temperature=temperature))
         
         # L_ce
-        self.cross_entropy = (nn.CrossEntropyLoss())
+        self.cross_entropy = cross_entropy
 
     def forward(
         self,
