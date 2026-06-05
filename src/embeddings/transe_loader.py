@@ -1,77 +1,55 @@
+import pickle
 import numpy as np
-import ast
+
 
 # Loads NELL TransE embeddings for entity graph node features
 class TransELoader:
-    def __init__(self, embedding_file, mapping_file):
-        # Embeddings (row-aligned matrix)
-        self.embeddings = np.loadtxt(embedding_file, dtype=np.float32)
 
+    # Load entity embeddings and entity-to-id mapping
+    def __init__(self, embedding_file, mapping_file):
+
+        # Load TransE embedding matrix
+        with open(embedding_file, "rb") as f:
+            self.embeddings = pickle.load(f)
+
+        # Load entity -> embedding index mapping
+        with open(mapping_file, "rb") as f:
+            self.entity2id = pickle.load(f)
+
+        # Store embedding dimensionality
         self.embedding_dim = self.embeddings.shape[1]
 
-        # Handle single-line dict format
-        with open(mapping_file, "r") as f:
-            raw = f.read().strip()
-
-        # Remove whitespaces and trailing commas
-        raw = raw.strip().rstrip(",")
-
-        # Convert string dict to Python dict
-        try:
-            self.entity_to_id = {}
-            with open(mapping_file, "r") as f:
-                raw = f.read().strip()
-
-            # Remove outer braces if present
-            raw = raw.strip()
-            if raw.startswith("{") and raw.endswith("}"):
-                raw = raw[1:-1]
-
-            # Split entries safely
-            for item in raw.split(","):
-                item = item.strip()
-
-                if not item:
-                    continue
-
-                # Assumes each item looks like: "name": 123
-                if ":" not in item:
-                    continue
-
-                key, val = item.split(":", 1)
-
-                key = key.strip().strip('"').strip("'")
-                val = val.strip()
-
-                # Remove trailing }
-                val = val.replace("}", "").strip()
-
-                try:
-                    self.entity_to_id[key] = int(val)
-                except ValueError:
-                    continue
-                
-        except Exception:
-            # Fallback manual parse
-            self.entity_to_id = {}
-            items = raw.split(",")
-            for item in items:
-                if ":" in item:
-                    k, v = item.split(":")
-                    k = k.strip().strip('"')
-                    v = int(v.strip())
-                    self.entity_to_id[k] = v
-
+    # Retrieve embedding vector for a single entity
     def get_embedding(self, entity):
-        idx = self.entity_to_id.get(entity)
 
-        if idx is None or idx >= self.embeddings.shape[0]:
-            return np.zeros(self.embedding_dim, dtype=np.float32)
+        # Normalize entity text
+        entity = entity.lower()
 
+        # Return 0 vector if entity is unknown
+        if entity not in self.entity2id:
+            return np.zeros(
+                self.embedding_dim,
+                dtype=np.float32
+            )
+
+        # Get embedding row index
+        idx = self.entity2id[entity]
+
+        # Return 0 vector if index is invalid
+        if idx >= len(self.embeddings):
+            return np.zeros(
+                self.embedding_dim,
+                dtype=np.float32
+            )
+
+        # Return TransE embedding vector
         return self.embeddings[idx]
 
+    # Build feature matrix for a list of entities
     def build_feature_matrix(self, entities):
+
+        # Stack entity embeddings into matrix
         return np.array(
-            [self.get_embedding(e) for e in entities],
+            [self.get_embedding(entity) for entity in entities],
             dtype=np.float32
         )

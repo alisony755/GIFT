@@ -8,6 +8,7 @@ from src.data.build_vocab import VocabularyBuilder
 from src.data.entity_extractor import EntityExtractor
 from src.data.load_nell import load_ent2ids
 
+import time
 
 def save_pickle(path, obj):
     with open(path, "wb") as f:
@@ -15,35 +16,45 @@ def save_pickle(path, obj):
 
 
 def prepare_dataset(dataset_name):
-    dataset_path = f"original_datasets/{dataset_name}/{dataset_name.lower()}_split.json"
+    dataset_path = f"data/original/{dataset_name}/{dataset_name.lower()}_split.json"
 
     with open("data/external/NELL_KG/ent2ids_refined.pkl", "rb") as f:
         ent2ids = pickle.load(f)
+        
+    print(list(ent2ids.keys())[:20])
 
-    entity_extractor = EntityExtractor(ent2ids)
     preprocessor = Preprocessor()
+    entity_extractor = EntityExtractor(ent2ids)
     vocab_builder = VocabularyBuilder()
 
     with open(dataset_path, "r") as f:
         data = json.load(f)
 
-    save_dir = f"processed/{dataset_name}"
+    save_dir = f"data/processed/{dataset_name}"
     os.makedirs(save_dir, exist_ok=True)
 
     for split_name, split_data in data.items():
 
-        texts = list(split_data["texts"])
-        labels = list(split_data["labels"])
+        texts = []
+        labels = []
+
+        for i in sorted(split_data.keys(), key=int):
+            texts.append(split_data[i]["text"])
+            labels.append(int(split_data[i]["label"]))
 
         tokens = preprocessor.tokenize(texts)
         pos_tags = preprocessor.pos_tag(tokens)
 
         vocab = vocab_builder.build(tokens)
 
+        start = time.time()
         entities = entity_extractor.extract(texts)
+        print("Entity extraction time:", time.time() - start)
 
         # DEBUG
-        print(entities[:3])
+        print("NUM DOCS:", len(texts))
+        print("NUM ENTITY OUTPUTS:", len(entities))
+        print("SAMPLE:", entities[:3])
         assert len(entities) == len(texts)
 
         save_pickle(f"{save_dir}/{split_name}_texts.pkl", texts)

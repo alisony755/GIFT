@@ -10,4 +10,5 @@ data/external/
 *.p
 *.bin
 *.pt
-*.pth
+*.pkl
+data/processed/

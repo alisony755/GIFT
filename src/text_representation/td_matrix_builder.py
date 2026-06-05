@@ -3,38 +3,74 @@ import numpy as np
 class TDMatrixBuilder:
     # Creates word TD matrix (M_w)
     def build_word_matrix(self, texts, vocab):
-        M = np.zeros((len(texts), len(vocab)), dtype=np.float32)
+        vocab_list = sorted(list(vocab))
+        word2id = {
+            w: i
+            for i, w in enumerate(vocab_list)
+        }
 
-        word2id = {w:i for i, w in enumerate(vocab)}
+        M = np.zeros(
+            (len(texts), len(vocab_list)),
+            dtype=np.float32
+        )
 
-        for i, text in enumerate(texts):
-            for w in text.split():
-                if w in word2id:
-                    M[i, word2id[w]] += 1
+        for doc_idx, text in enumerate(texts):
+            for word in text.lower().split():
+                if word in word2id:
+                    M[doc_idx][word2id[word]] = 1.0
 
         return M
 
     # Creates entity binary matrix (M_e)
     def build_entity_matrix(self, texts, entities):
-        M = np.zeros((len(texts), len(entities)), dtype=np.float32)
-        ent2id = {e:i for i, e in enumerate(entities)}
+        ent2id = {}
 
-        for i, text in enumerate(texts):
-            for e in entities:
-                if e in text:
-                    M[i, ent2id[e]] = 1
+        for doc_entities in entities:
+            for e in doc_entities:
+                if e not in ent2id:
+                    ent2id[e] = len(ent2id)
+
+        M = np.zeros(
+            (len(texts), len(ent2id)),
+            dtype=np.float32
+        )
+        
+        # DEBUG
+        print("Texts:", len(texts))
+        print("Entities:", len(entities))
+
+        for doc_idx, doc_entities in enumerate(entities):
+            for e in doc_entities:
+                M[doc_idx][ent2id[e]] = 1.0
 
         return M
 
     # Create POS TD matrix (M_p)
-    def build_pos_matrix(self, pos_lists, pos_vocab):
-        M = np.zeros((len(pos_lists), len(pos_vocab)), dtype=np.float32)
+    def build_pos_matrix(self, pos_tags, pos_vocab):
+        pos2id = {
+            p: i
+            for i, p in enumerate(pos_vocab)
+        }
 
-        pos2id = {p:i for i, p in enumerate(pos_vocab)}
+        # Force alignment check
+        num_docs = len(pos_tags)
 
-        for i, tags in enumerate(pos_lists):
-            for p in tags:
-                if p in pos2id:
-                    M[i, pos2id[p]] += 1
+        M = np.zeros(
+            (num_docs, len(pos_vocab)),
+            dtype=np.float32
+        )
+
+        for doc_idx, tags in enumerate(pos_tags):
+            # Prevent mismatch crashes
+            if doc_idx >= num_docs:
+                break
+
+            # Ensure tags is iterable
+            if isinstance(tags, str):
+                tags = tags.split()
+
+            for tag in tags:
+                if tag in pos2id:
+                    M[doc_idx][pos2id[tag]] = 1.0
 
         return M

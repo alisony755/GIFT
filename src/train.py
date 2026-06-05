@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import torch
 import pickle
@@ -123,10 +124,15 @@ class GIFTTrainer:
         )
 
         H_w, H_e, H_p = self.run_gcn(word_graph, entity_graph, pos_graph)
-
+        
         M_w, M_e, M_p = self.build_td_matrices(
             texts, vocab, entities, pos_tags
         )
+        
+        # DEBUG
+        print("M_w:", M_w.shape)
+        print("M_e:", M_e.shape)
+        print("M_p:", M_p.shape)
 
         M_wr, M_er, M_pr = self.run_svd(M_w, M_e, M_p)
 
@@ -166,15 +172,16 @@ def load_dataset(dataset_name):
     with open(idx_path) as f:
         idx = json.load(f)
 
-    all_texts = []
-    all_labels = []
+    all_docs = []
 
-    for i in sorted(data["train"].keys(), key=int):
-        all_texts.append(data["train"][i]["text"])
-        all_labels.append(int(data["train"][i]["label"]))
+    for split in data.values():
+        for i in sorted(split.keys(), key=int):
+            all_docs.append(split[i])
+
+    all_texts = [doc["text"] for doc in all_docs]
+    all_labels = [int(doc["label"]) for doc in all_docs]
 
     train_idx = idx["train"]
-
     train_texts = [all_texts[i] for i in train_idx]
     train_labels = [all_labels[i] for i in train_idx]
 
@@ -191,6 +198,10 @@ if __name__ == "__main__":
     train_texts, train_labels, labeled_idx = load_dataset(args.dataset)
 
     base = f"data/processed/{args.dataset}"
+    
+    # DEBUG
+    print("BASE PATH:", base)
+    print("FILES:", os.listdir(base))
 
     train_tokens = load_pickle(f"{base}/train_tokens.pkl")
     train_pos = load_pickle(f"{base}/train_pos.pkl")
@@ -198,6 +209,28 @@ if __name__ == "__main__":
     train_vocab = load_pickle(f"{base}/train_vocab.pkl")
 
     labels_tensor = torch.tensor(train_labels, dtype=torch.long)
+    
+    # DEBUG
+    if isinstance(train_entities[0], list) and isinstance(train_entities[0][0], str):
+        print("OK: entity-per-doc structure detected")
+    else:
+        raise ValueError("entities are NOT per-document aligned at load time")
+    
+    # DEBUG
+    print("DEBUG BEFORE TRAINING")
+    print("texts:", len(train_texts))
+    print("entities:", len(train_entities))
+    print("pos:", len(train_pos))
+    
+    print("ENTITY SAMPLE:", train_entities[:2])
+    print("POS SAMPLE:", train_pos[:2])
+
+    # HARD FAIL IF FLATTENED
+    if isinstance(train_entities[0], str):
+        raise ValueError("entities are flattened — extractor output is wrong")
+
+    if isinstance(train_pos[0], str):
+        raise ValueError("pos_tags are flattened — preprocess output is wrong")
 
     batch = {
         "texts": train_texts,
@@ -210,9 +243,9 @@ if __name__ == "__main__":
     }
 
     config = {
-        "glove_path": "embeddings/glove.txt",
-        "transe_path": "embeddings/transe.pkl",
-        "mapping_path": "embeddings/entity_map.pkl",
+        "glove_path": "data/external/glove/glove.pkl",
+        "transe_path": "data/external/NELL_KG/transe.pkl",
+        "mapping_path": "data/external/NELL_KG/entity_map.pkl",
         "rank_ratio": 0.5,
         "temp": 0.5,
         "input_dim": 768,
@@ -224,6 +257,12 @@ if __name__ == "__main__":
     }
 
     trainer = GIFTTrainer(config)
+    
+    # DEBUG
+    print("ENTITY TYPE CHECK:")
+    print(type(train_entities))
+    print("FIRST ITEM TYPE:", type(train_entities[0]))
+    print("FIRST ITEM:", train_entities[0])
 
     outputs = trainer.forward(batch)
 
