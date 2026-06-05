@@ -157,8 +157,8 @@ def load_pickle(path):
 
 
 def load_dataset(dataset_name):
-    split_path = f"original_datasets/{dataset_name}/{dataset_name.lower()}_split.json"
-    idx_path = f"original_datasets/{dataset_name}/{dataset_name.lower()}_idx_split.json"
+    split_path = f"data/original/{dataset_name}/{dataset_name.lower()}_split.json"
+    idx_path = f"data/original/{dataset_name}/{dataset_name.lower()}_idx_split.json"
 
     with open(split_path) as f:
         data = json.load(f)
