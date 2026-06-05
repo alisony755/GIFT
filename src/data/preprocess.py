@@ -10,7 +10,7 @@ class Preprocessor:
     def clean(self, text):
         text = text.lower() # Convert to lowercase
         text = re.sub(r"http\S+", "", text) # Remove urls
-        text = re.sub(r"[^a-z0-9 ]", " ", text) # Keep letters only
+        re.sub(r"[^a-z0-9' ]", " ", text) # Keep letters, numbers, apostrophes
         text = re.sub(r"\s+", " ", text) # Remove/standardize whitespace
 
         return text.strip()

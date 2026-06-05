@@ -1,33 +1,29 @@
 import json
 
 class DatasetLoader:
-    def __init__(self, path):
+    def init(self, path):
         self.path = path
+
 
     def load(self):
         with open(self.path, "r") as f:
             data = json.load(f)
 
-        train = data["train"]
-        test = data["test"]
+        return {
+            "train": self._parse_split(data["train"]),
+            "valid": self._parse_split(data["valid"]),
+            "test": self._parse_split(data["test"])
+        }
 
-        train_texts = []
-        train_labels = []
+    def _parse_split(self, split):
+        texts = []
+        labels = []
 
-        for item in train.values():
-            train_texts.append(item["text"])
-            train_labels.append(item["label"])
-
-        test_texts = []
-        test_labels = []
-
-        for item in test.values():
-            test_texts.append(item["text"])
-            test_labels.append(item["label"])
+        for item in split.values():
+            texts.append(item["text"])
+            labels.append(int(item["label"]))
 
         return {
-            "train_texts": train_texts,
-            "train_labels": train_labels,
-            "test_texts": test_texts,
-            "test_labels": test_labels
+            "texts": texts,
+            "labels": labels
         }

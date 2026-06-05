@@ -1,17 +1,22 @@
+import re
+
 class EntityExtractor:
-    def __init__(self, entity_vocab):
-        self.entity_vocab = entity_vocab
+    def __init__(self, ent2ids):
+        # ent2ids
+        self.ent2ids = ent2ids
+        self.entities = list(ent2ids.keys())
 
     def extract(self, texts):
         results = []
 
         for text in texts:
-            found = []
-
             lower = text.lower()
 
-            for entity in self.entity_vocab:
-                if entity.lower() in lower:
+            found = []
+
+            for entity in self.entities:
+                # Substring match
+                if re.search(r"\b" + re.escape(entity.lower()) + r"\b", lower):
                     found.append(entity)
 
             results.append(found)
