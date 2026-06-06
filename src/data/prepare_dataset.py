@@ -15,13 +15,62 @@ def save_pickle(path, obj):
         pickle.dump(obj, f)
 
 
+# def prepare_dataset(dataset_name):
+#     dataset_path = f"data/original/{dataset_name}/{dataset_name.lower()}_split.json"
+
+#     with open("data/external/NELL_KG/ent2ids_refined.pkl", "rb") as f:
+#         ent2ids = pickle.load(f)
+        
+#     print(list(ent2ids.keys())[:20])
+
+#     preprocessor = Preprocessor()
+#     entity_extractor = EntityExtractor(ent2ids)
+#     vocab_builder = VocabularyBuilder()
+
+#     with open(dataset_path, "r") as f:
+#         data = json.load(f)
+
+#     save_dir = f"data/processed/{dataset_name}"
+#     os.makedirs(save_dir, exist_ok=True)
+
+#     for split_name, split_data in data.items():
+
+#         texts = []
+#         labels = []
+
+#         for i in sorted(split_data.keys(), key=int):
+#             texts.append(split_data[i]["text"])
+#             labels.append(int(split_data[i]["label"]))
+
+#         tokens = preprocessor.tokenize(texts)
+#         pos_tags = preprocessor.pos_tag(tokens)
+
+#         vocab = vocab_builder.build(tokens)
+
+#         start = time.time()
+#         entities = entity_extractor.extract(texts)
+#         print("Entity extraction time:", time.time() - start)
+
+#         # DEBUG
+#         print("NUM DOCS:", len(texts))
+#         print("NUM ENTITY OUTPUTS:", len(entities))
+#         print("SAMPLE:", entities[:3])
+#         assert len(entities) == len(texts)
+
+#         save_pickle(f"{save_dir}/{split_name}_texts.pkl", texts)
+#         save_pickle(f"{save_dir}/{split_name}_tokens.pkl", tokens)
+#         save_pickle(f"{save_dir}/{split_name}_vocab.pkl", vocab)
+#         save_pickle(f"{save_dir}/{split_name}_entities.pkl", entities)
+#         save_pickle(f"{save_dir}/{split_name}_pos.pkl", pos_tags)
+#         save_pickle(f"{save_dir}/{split_name}_labels.pkl", labels)
+
+#         print(f"Saved {split_name}")
+
 def prepare_dataset(dataset_name):
     dataset_path = f"data/original/{dataset_name}/{dataset_name.lower()}_split.json"
 
     with open("data/external/NELL_KG/ent2ids_refined.pkl", "rb") as f:
         ent2ids = pickle.load(f)
-        
-    print(list(ent2ids.keys())[:20])
 
     preprocessor = Preprocessor()
     entity_extractor = EntityExtractor(ent2ids)
@@ -30,41 +79,41 @@ def prepare_dataset(dataset_name):
     with open(dataset_path, "r") as f:
         data = json.load(f)
 
-    save_dir = f"data/processed/{dataset_name}"
-    os.makedirs(save_dir, exist_ok=True)
+    # Combine ALL splits into one corpus
+    texts = []
+    labels = []
 
-    for split_name, split_data in data.items():
-
-        texts = []
-        labels = []
+    for split_data in data.values():
 
         for i in sorted(split_data.keys(), key=int):
+
             texts.append(split_data[i]["text"])
             labels.append(int(split_data[i]["label"]))
 
-        tokens = preprocessor.tokenize(texts)
-        pos_tags = preprocessor.pos_tag(tokens)
+    print("TOTAL DOCS:", len(texts))
 
-        vocab = vocab_builder.build(tokens)
+    tokens = preprocessor.tokenize(texts)
 
-        start = time.time()
-        entities = entity_extractor.extract(texts)
-        print("Entity extraction time:", time.time() - start)
+    pos_tags = preprocessor.pos_tag(tokens)
 
-        # DEBUG
-        print("NUM DOCS:", len(texts))
-        print("NUM ENTITY OUTPUTS:", len(entities))
-        print("SAMPLE:", entities[:3])
-        assert len(entities) == len(texts)
+    vocab = vocab_builder.build(tokens)
 
-        save_pickle(f"{save_dir}/{split_name}_texts.pkl", texts)
-        save_pickle(f"{save_dir}/{split_name}_tokens.pkl", tokens)
-        save_pickle(f"{save_dir}/{split_name}_vocab.pkl", vocab)
-        save_pickle(f"{save_dir}/{split_name}_entities.pkl", entities)
-        save_pickle(f"{save_dir}/{split_name}_pos.pkl", pos_tags)
-        save_pickle(f"{save_dir}/{split_name}_labels.pkl", labels)
+    entities = entity_extractor.extract(texts)
 
-        print(f"Saved {split_name}")
+    print("NUM DOCS:", len(texts))
+    print("NUM ENTITY OUTPUTS:", len(entities))
+
+    save_dir = f"data/processed/{dataset_name}"
+    os.makedirs(save_dir, exist_ok=True)
+
+    save_pickle(f"{save_dir}/train_texts.pkl", texts)
+    save_pickle(f"{save_dir}/train_tokens.pkl", tokens)
+    save_pickle(f"{save_dir}/train_vocab.pkl", vocab)
+    save_pickle(f"{save_dir}/train_entities.pkl", entities)
+    save_pickle(f"{save_dir}/train_pos.pkl", pos_tags)
+    save_pickle(f"{save_dir}/train_labels.pkl", labels)
+
+    print("Saved full dataset")
 
 
 if __name__ == "__main__":

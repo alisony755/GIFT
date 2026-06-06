@@ -1,40 +1,44 @@
 import numpy as np
 
 class SVD:
-    def __init__(self, k=100, iters=20):
+    def __init__(self, k=15, n_iter=4, oversample=10, random_state=42):
         self.k = k
-        self.iters = iters
-
-    def _power_iteration(self, A):
-        b = np.random.randn(A.shape[1])
-        b = b / (np.linalg.norm(b) + 1e-12)
-
-        for _ in range(self.iters):
-            b = A.T @ (A @ b)
-            b = b / (np.linalg.norm(b) + 1e-12)
-
-        sigma = np.linalg.norm(A @ b)
-        u = (A @ b) / (sigma + 1e-12)
-
-        return sigma, u, b
+        self.n_iter = n_iter # Power iteration steps for accuracy on low-rank signal
+        self.oversample = oversample # Adds extra dimensions for accuracy, then truncates
+        self.random_state = random_state
 
     def fit_transform(self, M):
+        rng = np.random.default_rng(self.random_state)
         M = M.astype(np.float64)
-        U_list, S_list, V_list = [], [], []
+        n_rows, n_cols = M.shape
+        k = min(self.k, min(n_rows, n_cols)) # Can't exceed matrix rank
+        l = k + self.oversample # Oversampled rank
 
-        A = M.copy()
+        # Random Gaussian projection matrix
+        Omega = rng.standard_normal((n_cols, l))
 
-        for _ in range(self.k):
-            sigma, u, v = self._power_iteration(A)
+        Y = M @ Omega
 
-            U_list.append(u)
-            V_list.append(v)
-            S_list.append(sigma)
+        # Power iteration to improve accuracy, so noisy singular values don't
+        # leak into the approximation
+        for _ in range(self.n_iter):
+            Y = M @ (M.T @ Y)
 
-            A = A - sigma * np.outer(u, v)
+        # QR decomposition
+        Q, _ = np.linalg.qr(Y)
 
-        U = np.stack(U_list, axis=1)
-        V = np.stack(V_list, axis=1)
-        S = np.diag(S_list)
+        # Project M into the subspace
+        B = Q.T @ M
+
+        # SVD on matrix B
+        U_hat, S, Vt = np.linalg.svd(B, full_matrices=False)
+
+        # Recover left singular vectors in original space
+        U = Q @ U_hat
+
+        # Truncate to k and return in same format as before
+        U = U[:, :k]
+        S = np.diag(S[:k])
+        V = Vt[:k, :].T
 
         return U, S, V

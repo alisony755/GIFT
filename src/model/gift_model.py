@@ -68,7 +68,6 @@ class GIFTModel(nn.Module):
     ):
     
         # Eq. 6
-        #Z_cl = torch.cat([Z_org, Z_aug], dim=0)
         P_org = self.contrastive_projection(Z_org)
         P_aug = self.contrastive_projection(Z_aug)
         L_cl = self.contrastive_loss(P_org, P_aug)
@@ -96,3 +95,7 @@ class GIFTModel(nn.Module):
             "classification_loss": L_ce,
             "logits": logits
         }
+        
+# Returns logits
+def classify(self, Z):
+    return self.classifier_head(Z)
