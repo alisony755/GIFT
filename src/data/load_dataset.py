@@ -4,7 +4,6 @@ class DatasetLoader:
     def init(self, path):
         self.path = path
 
-
     def load(self):
         with open(self.path, "r") as f:
             data = json.load(f)

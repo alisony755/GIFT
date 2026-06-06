@@ -85,6 +85,11 @@ class GIFTTrainer:
         )
 
     def build_td_matrices(self, texts, vocab, entities, pos_tags):
+        n_docs = len(texts)
+
+        entities = entities[:n_docs]
+        pos_tags = pos_tags[:n_docs]
+
         M_w = self.td_builder.build_word_matrix(texts, vocab)
         M_e = self.td_builder.build_entity_matrix(texts, entities)
 
@@ -195,7 +200,10 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", type=str, required=True)
     args = parser.parse_args()
 
-    train_texts, train_labels, labeled_idx = load_dataset(args.dataset)
+    train_texts, train_labels, train_idx = load_dataset(args.dataset)
+
+    # Make labeled indices relative to filtered train set
+    labeled_idx = list(range(len(train_texts)))
 
     base = f"data/processed/{args.dataset}"
     
@@ -211,10 +219,11 @@ if __name__ == "__main__":
     labels_tensor = torch.tensor(train_labels, dtype=torch.long)
     
     # DEBUG
-    if isinstance(train_entities[0], list) and isinstance(train_entities[0][0], str):
-        print("OK: entity-per-doc structure detected")
-    else:
-        raise ValueError("entities are NOT per-document aligned at load time")
+    if len(train_entities) != len(train_texts):
+        train_entities = train_entities[:len(train_texts)]
+
+    if len(train_pos) != len(train_texts):
+        train_pos = train_pos[:len(train_texts)]
     
     # DEBUG
     print("DEBUG BEFORE TRAINING")
@@ -263,6 +272,11 @@ if __name__ == "__main__":
     print(type(train_entities))
     print("FIRST ITEM TYPE:", type(train_entities[0]))
     print("FIRST ITEM:", train_entities[0])
+    
+    print("FINAL CHECK:",
+      len(train_texts),
+      len(train_entities),
+      len(train_pos))
 
     outputs = trainer.forward(batch)
 

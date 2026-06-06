@@ -23,17 +23,16 @@ class TDMatrixBuilder:
 
     # Creates entity binary matrix (M_e)
     def build_entity_matrix(self, texts, entities):
-        ent2id = {}
+        n_docs = len(texts)
+        entities = entities[:n_docs]
 
-        for doc_entities in entities:
-            for e in doc_entities:
-                if e not in ent2id:
-                    ent2id[e] = len(ent2id)
+        all_entities = sorted(list(set(
+            e for doc in entities for e in doc
+        )))
 
-        M = np.zeros(
-            (len(texts), len(ent2id)),
-            dtype=np.float32
-        )
+        ent2id = {e: i for i, e in enumerate(all_entities)}
+
+        M = np.zeros((n_docs, len(all_entities)), dtype=np.float32)
         
         # DEBUG
         print("Texts:", len(texts))
@@ -41,7 +40,8 @@ class TDMatrixBuilder:
 
         for doc_idx, doc_entities in enumerate(entities):
             for e in doc_entities:
-                M[doc_idx][ent2id[e]] = 1.0
+                if e in ent2id:
+                    M[doc_idx][ent2id[e]] = 1.0
 
         return M
 

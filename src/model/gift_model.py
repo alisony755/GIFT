@@ -68,9 +68,10 @@ class GIFTModel(nn.Module):
     ):
     
         # Eq. 6
-        Z_cl = torch.cat([Z_org, Z_aug], dim=0)
-        P = self.contrastive_projection(Z_cl)
-        L_cl = self.contrastive_loss(P)
+        #Z_cl = torch.cat([Z_org, Z_aug], dim=0)
+        P_org = self.contrastive_projection(Z_org)
+        P_aug = self.contrastive_projection(Z_aug)
+        L_cl = self.contrastive_loss(P_org, P_aug)
 
         # Eq. 7
         Q = self.cluster_projection(Z_org)

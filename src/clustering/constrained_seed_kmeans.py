@@ -20,13 +20,21 @@ class ConstrainedSeedKMeans:
         centroids = []
 
         for cluster_id in range(self.num_clusters):
-            members = embeddings[seed_indices[seed_labels == cluster_id]]
+            mask = (seed_labels == cluster_id)
+
+            selected_indices = [
+                seed_indices[i]
+                for i in range(len(seed_indices))
+                if mask[i]
+            ]
+
+            members = embeddings[selected_indices]
 
             centroid = members.mean(axis=0)
             centroids.append(centroid)
 
         centroids = np.vstack(centroids)
-        seed_set = set(seed_indices.tolist())
+        seed_set = set(seed_indices)
 
         for _ in range(self.max_iter):
             old_centroids = (centroids.copy())
