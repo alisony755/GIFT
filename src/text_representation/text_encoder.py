@@ -15,6 +15,7 @@ class TextEncoder:
         Z_p = self.aggregate(M_p, H_p)
 
         Z_org = np.concatenate([Z_w, Z_e, Z_p], axis=1)
+        Z_org = Z_org / (np.linalg.norm(Z_org, axis=1, keepdims=True) + 1e-9)
 
         return Z_org
 

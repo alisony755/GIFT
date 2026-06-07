@@ -97,12 +97,13 @@ class GIFTModel(nn.Module):
         
         # DEBUG
         labeled_true = true_labels[labeled_indices]
+        print(f"  labeled_indices[:5]: {labeled_indices[:5]}")
+        print(f"  labeled_true unique: {labeled_true.unique()}")
         print(f"  labeled_logits shape: {labeled_logits.shape}")
         print(f"  labeled_true shape: {labeled_true.shape}")
         print(f"  labeled_true values: {labeled_true[:5]}")
         L_ce = self.cross_entropy(labeled_logits, labeled_true)
         print(f"  L_ce: {L_ce.item():.4f}")
-
 
         # Eq. 9
         total_loss = (

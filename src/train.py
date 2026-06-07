@@ -17,24 +17,25 @@ from src.clustering.constrained_seed_kmeans import ConstrainedSeedKMeans
 from src.model.gift_model import GIFTModel
 from sklearn.metrics import accuracy_score, f1_score
 
-def evaluate(model, Z_org_tensor, idx, true_labels):
+def evaluate(model, Z_org, idx, true_labels):
     model.eval()
-    print(f"Z_org_tensor has nan: {torch.isnan(Z_org_tensor).any().item()}")
-    print(f"Z_org_tensor min/max: {Z_org_tensor.min().item():.4f} / {Z_org_tensor.max().item():.4f}")
-
     with torch.no_grad():
-        Z = Z_org_tensor[idx]
+        Z = Z_org[idx]
         logits = model.classify(Z)
         preds = torch.argmax(logits, dim=1).cpu().numpy()
-
     labels = [true_labels[i] for i in idx]
     acc = accuracy_score(labels, preds)
     f1 = f1_score(labels, preds, average="macro")
     return acc, f1
 
+
 class GIFTTrainer:
     def __init__(self, config):
         self.config = config
+
+        self.gcn_w = None
+        self.gcn_e = None
+        self.gcn_p = None
 
         self.word_graph_builder = WordGraphBuilder(glove_path=config["glove_path"])
         self.entity_graph_builder = EntityGraphBuilder(config["transe_path"], config["mapping_path"])
@@ -61,17 +62,27 @@ class GIFTTrainer:
             self.pos_graph_builder.build(corpus_pos_tags),
         )
 
-    def run_gcn(self, word_graph, entity_graph, pos_graph):
-        def encode(graph):
-            model = GCNEncoder(
-                input_dim=graph.X.shape[1],
-                hidden_dim=self.config["hidden_dim"]
-            )
-            x = torch.tensor(graph.X, dtype=torch.float32)
-            a = torch.tensor(graph.A, dtype=torch.float32)
-            return model(x, a).detach().cpu().numpy()
+    def init_gcn(self, word_graph, entity_graph, pos_graph):
+        # Creates GCN models and stores them on trainer
+        self.gcn_w = GCNEncoder(
+            input_dim=word_graph.X.shape[1],
+            hidden_dim=self.config["hidden_dim"]
+        )
+        self.gcn_e = GCNEncoder(
+            input_dim=entity_graph.X.shape[1],
+            hidden_dim=self.config["hidden_dim"]
+        )
+        self.gcn_p = GCNEncoder(
+            input_dim=pos_graph.X.shape[1],
+            hidden_dim=self.config["hidden_dim"]
+        )
 
-        return encode(word_graph), encode(entity_graph), encode(pos_graph)
+    def run_gcn(self, X_w, A_w, X_e, A_e, X_p, A_p):
+        # Runs GCN forward pass
+        H_w = self.gcn_w(X_w, A_w)
+        H_e = self.gcn_e(X_e, A_e)
+        H_p = self.gcn_p(X_p, A_p)
+        return H_w, H_e, H_p
 
     def build_td_matrices(self, texts, vocab, entities, pos_tags):
         M_w = self.td_builder.build_word_matrix(texts, vocab)
@@ -87,55 +98,30 @@ class GIFTTrainer:
             self.svd.build_augmented_matrix(M_p),
         )
 
-    def build_embeddings(self, M_w, M_e, M_p, M_wr, M_er, M_pr, H_w, H_e, H_p):
-        Z_org = self.encoder.build_original(M_w, M_e, M_p, H_w, H_e, H_p)
-        Z_aug = self.encoder.build_augmented(M_wr, M_er, M_pr, H_w, H_e, H_p)
+    def build_embeddings(self, M_w_t, M_e_t, M_p_t, M_wr_t, M_er_t, M_pr_t, H_w, H_e, H_p):
+        # TD matrices are pre-converted tensors passed in
+        # H matrices are GCN outputs
+        Z_w = M_w_t @ H_w
+        Z_e = M_e_t @ H_e
+        Z_p = M_p_t @ H_p
+        Z_org = torch.cat([Z_w, Z_e, Z_p], dim=1)
+
+        Z_wr = M_wr_t @ H_w
+        Z_er = M_er_t @ H_e
+        Z_pr = M_pr_t @ H_p
+        Z_aug = torch.cat([Z_wr, Z_er, Z_pr], dim=1)
+
         return Z_org, Z_aug
 
-    def run_kmeans(self, Z_org, labeled_idx, labels):
+    def run_kmeans(self, Z_org_numpy, labeled_idx, labels):
         kmeans = ConstrainedSeedKMeans(num_clusters=self.config["num_classes"])
-        return kmeans.fit_predict(Z_org, labeled_idx, labels)
+        return kmeans.fit_predict(Z_org_numpy, labeled_idx, labels)
 
 
 def load_pickle(path):
     with open(path, "rb") as f:
         return pickle.load(f)
 
-
-# def load_dataset(dataset_name):
-#     split_path = f"data/original/{dataset_name}/{dataset_name.lower()}_split.json"
-#     with open(split_path) as f:
-#         data = json.load(f)
-        
-#     # DEBUG
-#     print(data.keys())
-#     for k, v in data.items():
-#         print(k, len(v))
-
-#     all_texts, all_labels = [], []
-#     train_labeled_idx, val_idx, test_idx = [], [], []
-
-#     for split_name, split_docs in data.items():
-#         for i in sorted(split_docs.keys(), key=int):
-#             doc = split_docs[i]
-#             idx = len(all_texts)
-#             all_texts.append(doc["text"])
-#             all_labels.append(int(doc["label"]))
-
-#             if split_name == "train":
-#                 train_labeled_idx.append(idx)
-#             elif split_name in ("val", "dev"):
-#                 val_idx.append(idx)
-#             else:
-#                 test_idx.append(idx)
-
-#     return {
-#         "all_texts": all_texts,
-#         "all_labels": all_labels,
-#         "train_labeled_idx": train_labeled_idx,
-#         "val_idx": val_idx,
-#         "test_idx": test_idx,
-#     }
 
 def load_dataset(dataset_name):
     split_path = f"data/original/{dataset_name}/{dataset_name.lower()}_split.json"
@@ -146,26 +132,17 @@ def load_dataset(dataset_name):
 
     with open(idx_path) as f:
         idx_data = json.load(f)
-        
-    #  # DEBUG
-    # print(data.keys())
-    # for k, v in data.items():
-    #     print(k, len(v))
 
     print("IDX KEYS:", idx_data.keys())
     print("IDX SAMPLE:", {k: v[:5] for k, v in idx_data.items()})
 
     all_texts, all_labels = [], []
 
-    # Load train corpus (labeled + unlabeled)
     for i in sorted(split_data["train"].keys(), key=int):
         doc = split_data["train"][i]
         all_texts.append(doc["text"])
         all_labels.append(int(doc["label"]))
 
-    train_corpus_size = len(all_texts)
-
-    # Load test docs, appended after train
     for i in sorted(split_data["test"].keys(), key=int):
         doc = split_data["test"][i]
         all_texts.append(doc["text"])
@@ -173,7 +150,7 @@ def load_dataset(dataset_name):
 
     train_labeled_idx = idx_data["train"]
     val_idx = idx_data["valid"]
-    test_idx = idx_data["test"] 
+    test_idx = idx_data["test"]
 
     return {
         "all_texts": all_texts,
@@ -182,6 +159,7 @@ def load_dataset(dataset_name):
         "val_idx": val_idx,
         "test_idx": test_idx,
     }
+
 
 if __name__ == "__main__":
     import argparse
@@ -211,11 +189,12 @@ if __name__ == "__main__":
     train_entities = load_pickle(f"{base}/train_entities.pkl")
     train_vocab = load_pickle(f"{base}/train_vocab.pkl")
 
-    # Sanity checks
     assert not isinstance(train_entities[0], str), "entities are flattened"
     assert not isinstance(train_pos[0], str), "pos_tags are flattened"
 
     labels_tensor = torch.tensor(all_labels, dtype=torch.long)
+    print(f"Label distribution in train: {torch.bincount(labels_tensor[torch.tensor(train_labeled_idx)])}")
+    print(f"Label distribution overall:  {torch.bincount(labels_tensor)}")
 
     config = {
         "glove_path": "data/external/glove/glove.pkl",
@@ -223,100 +202,135 @@ if __name__ == "__main__":
         "mapping_path": "data/external/NELL_KG/entity_map.pkl",
         "svd_k": 15,
         "temp": 0.5,
-        "input_dim": 768,
+        "input_dim": 384,
         "num_classes": 2,
-        "hidden_dim": 256,
+        "hidden_dim": 128,
         "projection_dim": 128,
         "eta": 0.5,
-        "zeta": 0.5, 
+        "zeta": 0.5,
         "batch_size": 256,
     }
 
     trainer = GIFTTrainer(config)
 
-    # Build everything once before the training loop
+    # Build graphs
     print("Building graphs...")
     word_graph, entity_graph, pos_graph = trainer.build_graphs(
         train_tokens, train_entities, train_pos
     )
 
-    print("Running GCN...")
-    H_w, H_e, H_p = trainer.run_gcn(word_graph, entity_graph, pos_graph)
+    # Init GCN models (weights shared across epochs)
+    print("Initializing GCN...")
+    trainer.init_gcn(word_graph, entity_graph, pos_graph)
 
+    # Convert graph inputs to tensors
+    X_w = torch.tensor(word_graph.X, dtype=torch.float32)
+    A_w = torch.tensor(word_graph.A, dtype=torch.float32)
+    X_e = torch.tensor(entity_graph.X, dtype=torch.float32)
+    A_e = torch.tensor(entity_graph.A, dtype=torch.float32)
+    X_p = torch.tensor(pos_graph.X, dtype=torch.float32)
+    A_p = torch.tensor(pos_graph.A, dtype=torch.float32)
+
+    # Build TD matrices
     print("Building TD matrices...")
     M_w, M_e, M_p = trainer.build_td_matrices(
         all_texts, train_vocab, train_entities, train_pos
     )
 
+    # Run SVD
     print("Running SVD...")
     M_wr, M_er, M_pr = trainer.run_svd(M_w, M_e, M_p)
 
-    print("Building embeddings...")
-    Z_org, Z_aug = trainer.build_embeddings(
-        M_w, M_e, M_p, M_wr, M_er, M_pr, H_w, H_e, H_p
-    )
+    # Cconvert TD matrices to tensors
+    M_w_t = torch.tensor(M_w,  dtype=torch.float32)
+    M_e_t = torch.tensor(M_e,  dtype=torch.float32)
+    M_p_t = torch.tensor(M_p,  dtype=torch.float32)
+    M_wr_t = torch.tensor(M_wr, dtype=torch.float32)
+    M_er_t = torch.tensor(M_er, dtype=torch.float32)
+    M_pr_t = torch.tensor(M_pr, dtype=torch.float32)
+
+    # Run k-means once using initial GCN embeddings
+    print("Building initial embeddings for k-means...")
+    with torch.no_grad():
+        H_w_init, H_e_init, H_p_init = trainer.run_gcn(X_w, A_w, X_e, A_e, X_p, A_p)
+        Z_org_init, _ = trainer.build_embeddings(
+            M_w_t, M_e_t, M_p_t, M_wr_t, M_er_t, M_pr_t,
+            H_w_init, H_e_init, H_p_init
+        )
 
     print("Running k-means...")
     train_labels_only = labels_tensor[train_labeled_idx]
-    weak_labels = trainer.run_kmeans(Z_org, train_labeled_idx, train_labels_only)
-    print("K-means done")
-    
-    print(f"Z_org shape: {Z_org.shape}")
-    print(f"Z_aug shape: {Z_aug.shape}")
-    print(f"weak_labels shape: {weak_labels.shape}")
-
-    # Convert to tensors once
-    Z_org_tensor = torch.tensor(Z_org, dtype=torch.float32)
-    print("Z_org tensor done")
-    Z_aug_tensor = torch.tensor(Z_aug, dtype=torch.float32)
-    print("Z_aug tensor done")
+    weak_labels = trainer.run_kmeans(
+        Z_org_init.cpu().numpy(),
+        train_labeled_idx,
+        train_labels_only
+    )
     weak_labels_tensor = torch.tensor(weak_labels, dtype=torch.long)
-    print("weak_labels tensor done")
+    print(f"K-means done. Weak label distribution: {torch.bincount(weak_labels_tensor)}")
 
-    # Training loop
-    optimizer = torch.optim.Adam(trainer.model.parameters(), lr=1e-3)
+    # Optimizer covers all trainable parameters
+    optimizer = torch.optim.Adam(
+        list(trainer.model.parameters()) +
+        list(trainer.gcn_w.parameters()) +
+        list(trainer.gcn_e.parameters()) +
+        list(trainer.gcn_p.parameters()),
+        lr=1e-3
+    )
 
     metrics = {"train_loss": [], "val_acc": [], "val_f1": []}
-
-    num_epochs = 10
+    print("Labeled sample classes:", labels_tensor[torch.tensor(train_labeled_idx)])
+    
+    num_epochs = 50
 
     for epoch in range(num_epochs):
-        print(f"Epoch {epoch+1} starting...")
-        if epoch == 0:
-            print("Epoch 1 weight check:")
-            for name, param in trainer.model.cluster_projection.named_parameters():
-                print(f"  {name}: min={param.min().item():.4f} max={param.max().item():.4f} nan={torch.isnan(param).any().item()}")
-        
+        # Training step
         trainer.model.train()
+        trainer.gcn_w.train()
+        trainer.gcn_e.train()
+        trainer.gcn_p.train()
         optimizer.zero_grad()
 
-        print("  Calling model forward...")
+        # Recompute H and Z each epoch (build fresh computation graph)
+        H_w, H_e, H_p = trainer.run_gcn(X_w, A_w, X_e, A_e, X_p, A_p)
+        Z_org, Z_aug = trainer.build_embeddings(
+            M_w_t, M_e_t, M_p_t, M_wr_t, M_er_t, M_pr_t,
+            H_w, H_e, H_p
+        )
+
         outputs = trainer.model(
-            Z_org_tensor,
-            Z_aug_tensor,
+            Z_org,
+            Z_aug,
             weak_labels_tensor,
-            train_labeled_idx, # Only training labeled indices
+            train_labeled_idx,
             labels_tensor
         )
-        print("  Model forward done.")
 
         loss = outputs["loss"]
-        print(f"  Loss: {loss.item():.4f}")
-        
-        print("  Backward...")
         loss.backward()
-        print("  Backward done.")
-        
-        optimizer.step()
-        print("  Step done.")
 
-        # Validate on val split only
-        val_acc, val_f1 = evaluate(
-            trainer.model,
-            Z_org_tensor,
-            val_idx,
-            all_labels
+        torch.nn.utils.clip_grad_norm_(
+            list(trainer.model.parameters()) +
+            list(trainer.gcn_w.parameters()) +
+            list(trainer.gcn_e.parameters()) +
+            list(trainer.gcn_p.parameters()),
+            max_norm=1.0
         )
+        optimizer.step()
+
+        # Validation step
+        trainer.model.eval()
+        trainer.gcn_w.eval()
+        trainer.gcn_e.eval()
+        trainer.gcn_p.eval()
+
+        with torch.no_grad():
+            H_w_eval, H_e_eval, H_p_eval = trainer.run_gcn(X_w, A_w, X_e, A_e, X_p, A_p)
+            Z_org_eval, _ = trainer.build_embeddings(
+                M_w_t, M_e_t, M_p_t, M_wr_t, M_er_t, M_pr_t,
+                H_w_eval, H_e_eval, H_p_eval
+            )
+
+        val_acc, val_f1 = evaluate(trainer.model, Z_org_eval, val_idx, all_labels)
 
         metrics["train_loss"].append(loss.item())
         metrics["val_acc"].append(val_acc)
@@ -330,5 +344,10 @@ if __name__ == "__main__":
         json.dump(metrics, f)
 
     os.makedirs("saved_models", exist_ok=True)
-    torch.save(trainer.model.state_dict(), f"saved_models/{args.dataset}_gift.pt")
+    torch.save({
+        "model": trainer.model.state_dict(),
+        "gcn_w": trainer.gcn_w.state_dict(),
+        "gcn_e": trainer.gcn_e.state_dict(),
+        "gcn_p": trainer.gcn_p.state_dict(),
+    }, f"saved_models/{args.dataset}_gift.pt")
     print("Model saved.")
