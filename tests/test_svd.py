@@ -4,12 +4,12 @@ from src.representation.svd_views import SVDViewGenerator
 # Run with python3 -m tests.test_svd
 
 M = np.random.rand(50,50)
-svd = SVDViewGenerator(rank_ratio=0.5)
+svd = SVDViewGenerator(k = 15)
 
 M_r = svd.build_augmented_matrix(M)
 
 for ratio in [1.0, 0.5, 0.2, 0.1]:
-    svd = SVDViewGenerator(rank_ratio=ratio)
+    svd = SVDViewGenerator(k = 15)
     M_r = svd.build_augmented_matrix(M)
 
     error = np.linalg.norm(M - M_r)

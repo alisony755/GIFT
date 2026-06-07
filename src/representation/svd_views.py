@@ -2,95 +2,52 @@ import numpy as np
 
 # Truncated SVD view generation
 class SVDViewGenerator:
-    def __init__(
-        self,
-        rank_ratio=0.1,
-        max_iter=100,
-        tol=1e-6
-    ):
-        self.rank_ratio = rank_ratio
-        self.max_iter = max_iter
-        self.tol = tol
+    def __init__(self, k=15, n_iter=4, oversample=10, random_state=42):
+        self.k = k
+        self.n_iter = n_iter
+        self.oversample = oversample
+        self.random_state = random_state
 
-    # Compute dominant eigenpair using power iteration
-    def power_iteration(self, A):
-        n = A.shape[0]
+    def svd(self, M, k):
+        rng = np.random.default_rng(self.random_state)
 
-        v = np.random.rand(n)
-        v = v / np.linalg.norm(v)
+        if hasattr(M, 'toarray'):
+            M = M.toarray()
 
-        for _ in range(self.max_iter):
-            v_new = A @ v
-            v_new = v_new / np.linalg.norm(v_new)
+        M = M.astype(np.float64)
+        n_rows, n_cols = M.shape
+        k = min(k, min(n_rows, n_cols))
+        l = k + self.oversample
 
-            if np.linalg.norm(v_new - v) < self.tol:
-                break
+        # Random Gaussian projection
+        Omega = rng.standard_normal((n_cols, l))
+        Y = M @ Omega
 
-            v = v_new
+        # Power iteration
+        for _ in range(self.n_iter):
+            Y = M @ (M.T @ Y)
 
-        eigenvalue = v.T @ A @ v
+        # QR decomposition
+        Q, _ = np.linalg.qr(Y)
 
-        return eigenvalue, v
+        # Project into small subspace
+        B = Q.T @ M
 
-    # Compute top-r eigenpairs using deflation
-    def eigendecompose(self, A, r):
-        eigenvalues = []
-        eigenvectors = []
+        # Cheap SVD on small matrix
+        U_hat, S, Vt = np.linalg.svd(B, full_matrices=False)
 
-        A_work = A.copy()
+        # Recover left singular vectors
+        U = Q @ U_hat
 
-        for _ in range(r):
-            value, vector = self.power_iteration(A_work)
+        U = U[:, :k]
+        S_diag = np.diag(S[:k])
+        V = Vt[:k, :].T
 
-            eigenvalues.append(value)
-            eigenvectors.append(vector)
+        return U, S_diag, Vt[:k, :]
 
-            # Deflation
-            A_work = (A_work - value * np.outer(vector, vector))
-
-        return (
-            np.array(eigenvalues),
-            np.column_stack(eigenvectors)
-        )
-
-    # Compute SVD from eigen-decomposition
-    def svd(self, M, r):
-        # Compute covariance matrix
-        MtM = M.T @ M
-
-        # Compute top-r eigenpairs
-        eigenvalues, V = self.eigendecompose(MtM, r)
-
-        # Compute singular values
-        singular_values = np.sqrt(np.maximum(eigenvalues, 0))
-
-        # Construct diagonal matrix
-        S = np.diag(singular_values)
-
-        # Compute left singular vectors
-        U = np.zeros((M.shape[0], r))
-
-        for i in range(r):
-            sigma = singular_values[i]
-
-            if sigma > 1e-12:
-                U[:, i] = (M @ V[:, i]) / sigma
-
-        Vt = V.T
-
-        return U, S, Vt
-
-    # Reconstruct low-rank approximation
     def reconstruct(self, U, S, Vt):
         return U @ S @ Vt
 
-    # Build SVD-augmented matrix
     def build_augmented_matrix(self, M):
-        max_rank = min(M.shape)
-
-        r = max(1, int(max_rank * self.rank_ratio))
-
-        U, S, Vt = self.svd(M, r)
-        M_r = self.reconstruct(U, S, Vt)
-
-        return M_r
+        U, S, Vt = self.svd(M, self.k)
+        return self.reconstruct(U, S, Vt)

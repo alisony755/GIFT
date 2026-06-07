@@ -86,14 +86,15 @@ if __name__ == "__main__":
         "glove_path": "data/external/glove/glove.pkl",
         "transe_path": "data/external/NELL_KG/transe.pkl",
         "mapping_path": "data/external/NELL_KG/entity_map.pkl",
-        "rank_ratio": 0.5,
+        "svd_k": 15,
         "temp": 0.5,
         "input_dim": 768,
         "num_classes": 2,
         "hidden_dim": 256,
         "projection_dim": 128,
         "eta": 0.5,
-        "zeta": 0.5
+        "zeta": 0.5,
+        "batch_size": 256,
     }
 
     # Rebuild embeddings

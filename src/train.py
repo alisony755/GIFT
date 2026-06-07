@@ -19,6 +19,9 @@ from sklearn.metrics import accuracy_score, f1_score
 
 def evaluate(model, Z_org_tensor, idx, true_labels):
     model.eval()
+    print(f"Z_org_tensor has nan: {torch.isnan(Z_org_tensor).any().item()}")
+    print(f"Z_org_tensor min/max: {Z_org_tensor.min().item():.4f} / {Z_org_tensor.max().item():.4f}")
+
     with torch.no_grad():
         Z = Z_org_tensor[idx]
         logits = model.classify(Z)
@@ -38,7 +41,7 @@ class GIFTTrainer:
         self.pos_graph_builder = POSGraphBuilder()
         self.td_builder = TDMatrixBuilder()
         self.encoder = TextEncoder()
-        self.svd = SVDViewGenerator(rank_ratio=config["rank_ratio"])
+        self.svd = SVDViewGenerator(k=config["svd_k"])
 
         self.model = GIFTModel(
             input_dim=config["input_dim"],
@@ -47,7 +50,8 @@ class GIFTTrainer:
             projection_dim=config["projection_dim"],
             temperature=config["temp"],
             eta=config["eta"],
-            zeta=config["zeta"]
+            zeta=config["zeta"],
+            batch_size=config["batch_size"],
         )
 
     def build_graphs(self, corpus_tokens, corpus_entities, corpus_pos_tags):
@@ -217,14 +221,15 @@ if __name__ == "__main__":
         "glove_path": "data/external/glove/glove.pkl",
         "transe_path": "data/external/NELL_KG/transe.pkl",
         "mapping_path": "data/external/NELL_KG/entity_map.pkl",
-        "rank_ratio": 0.5,
+        "svd_k": 15,
         "temp": 0.5,
         "input_dim": 768,
         "num_classes": 2,
         "hidden_dim": 256,
         "projection_dim": 128,
         "eta": 0.5,
-        "zeta": 0.5
+        "zeta": 0.5, 
+        "batch_size": 256,
     }
 
     trainer = GIFTTrainer(config)
@@ -252,12 +257,21 @@ if __name__ == "__main__":
     )
 
     print("Running k-means...")
-    weak_labels = trainer.run_kmeans(Z_org, train_labeled_idx, labels_tensor)
+    train_labels_only = labels_tensor[train_labeled_idx]
+    weak_labels = trainer.run_kmeans(Z_org, train_labeled_idx, train_labels_only)
+    print("K-means done")
+    
+    print(f"Z_org shape: {Z_org.shape}")
+    print(f"Z_aug shape: {Z_aug.shape}")
+    print(f"weak_labels shape: {weak_labels.shape}")
 
     # Convert to tensors once
     Z_org_tensor = torch.tensor(Z_org, dtype=torch.float32)
+    print("Z_org tensor done")
     Z_aug_tensor = torch.tensor(Z_aug, dtype=torch.float32)
+    print("Z_aug tensor done")
     weak_labels_tensor = torch.tensor(weak_labels, dtype=torch.long)
+    print("weak_labels tensor done")
 
     # Training loop
     optimizer = torch.optim.Adam(trainer.model.parameters(), lr=1e-3)
@@ -267,9 +281,16 @@ if __name__ == "__main__":
     num_epochs = 10
 
     for epoch in range(num_epochs):
+        print(f"Epoch {epoch+1} starting...")
+        if epoch == 0:
+            print("Epoch 1 weight check:")
+            for name, param in trainer.model.cluster_projection.named_parameters():
+                print(f"  {name}: min={param.min().item():.4f} max={param.max().item():.4f} nan={torch.isnan(param).any().item()}")
+        
         trainer.model.train()
         optimizer.zero_grad()
 
+        print("  Calling model forward...")
         outputs = trainer.model(
             Z_org_tensor,
             Z_aug_tensor,
@@ -277,10 +298,17 @@ if __name__ == "__main__":
             train_labeled_idx, # Only training labeled indices
             labels_tensor
         )
+        print("  Model forward done.")
 
         loss = outputs["loss"]
+        print(f"  Loss: {loss.item():.4f}")
+        
+        print("  Backward...")
         loss.backward()
+        print("  Backward done.")
+        
         optimizer.step()
+        print("  Step done.")
 
         # Validate on val split only
         val_acc, val_f1 = evaluate(
