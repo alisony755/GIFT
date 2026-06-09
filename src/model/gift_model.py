@@ -57,8 +57,8 @@ class GIFTModel(nn.Module):
         self.cluster_loss_fn = ClusterContrastiveLoss(temperature=temperature, batch_size=256)
         
         # L_ce
-        self.cross_entropy = cross_entropy
-
+        self.cross_entropy = nn.CrossEntropyLoss()
+            
     def forward(
         self,
         Z_org,
@@ -67,25 +67,14 @@ class GIFTModel(nn.Module):
         labeled_indices,
         true_labels
     ):
-        print(f"  Z_org min/max: {Z_org.min().item():.4f} / {Z_org.max().item():.4f}")
-    
         # Eq. 6
         P_org = self.contrastive_projection(Z_org)
         P_aug = self.contrastive_projection(Z_aug)
         L_cl = self.contrastive_loss_fn(P_org, P_aug)
         print(f"  L_cl: {L_cl.item():.4f}")
-        
-        print(f"  ContrastiveLoss input shape: {P_org.shape}")
 
         # Eq. 7
         Q = self.cluster_projection(Z_org)
-
-        # Check projection head weights for NaN
-        for name, param in self.cluster_projection.named_parameters():
-            if torch.isnan(param).any():
-                print(f"  NaN in cluster_projection param: {name}")
-        print(f"  Q has nan: {torch.isnan(Q).any().item()}")
-        print(f"  Q min/max: {Q.min().item():.4f} / {Q.max().item():.4f}")
 
         L_ccl = self.cluster_loss_fn(Q, cluster_labels)
         print(f"  L_ccl: {L_ccl.item():.4f}")
@@ -93,15 +82,7 @@ class GIFTModel(nn.Module):
         # Eq. 8
         logits = self.classifier(Z_org)
         labeled_logits = logits[labeled_indices]
-        L_ce = self.cross_entropy(labeled_logits, true_labels[labeled_indices])
-        
-        # DEBUG
         labeled_true = true_labels[labeled_indices]
-        print(f"  labeled_indices[:5]: {labeled_indices[:5]}")
-        print(f"  labeled_true unique: {labeled_true.unique()}")
-        print(f"  labeled_logits shape: {labeled_logits.shape}")
-        print(f"  labeled_true shape: {labeled_true.shape}")
-        print(f"  labeled_true values: {labeled_true[:5]}")
         L_ce = self.cross_entropy(labeled_logits, labeled_true)
         print(f"  L_ce: {L_ce.item():.4f}")
 

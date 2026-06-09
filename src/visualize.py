@@ -114,7 +114,7 @@ if __name__ == "__main__":
 
     # Load saved model weights
     checkpoint = torch.load(f"saved_models/{args.dataset}_gift.pt", weights_only=True)
-    trainer.model.load_state_dict(checkpoint["model"])
+    trainer.model.load_state_dict(checkpoint["model"], strict=True)
     trainer.gcn_w.load_state_dict(checkpoint["gcn_w"])
     trainer.gcn_e.load_state_dict(checkpoint["gcn_e"])
     trainer.gcn_p.load_state_dict(checkpoint["gcn_p"])

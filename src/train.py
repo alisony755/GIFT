@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import pickle
 import json
+import torch.nn.functional as F
 
 from src.graph.word_graph_builder import WordGraphBuilder
 from src.graph.entity_graph_builder import EntityGraphBuilder
@@ -24,6 +25,8 @@ def evaluate(model, Z_org, idx, true_labels):
         logits = model.classify(Z)
         preds = torch.argmax(logits, dim=1).cpu().numpy()
     labels = [true_labels[i] for i in idx]
+    assert len(Z_org) == len(true_labels)
+    
     acc = accuracy_score(labels, preds)
     f1 = f1_score(labels, preds, average="macro")
     return acc, f1
@@ -99,8 +102,6 @@ class GIFTTrainer:
         )
 
     def build_embeddings(self, M_w_t, M_e_t, M_p_t, M_wr_t, M_er_t, M_pr_t, H_w, H_e, H_p):
-        # TD matrices are pre-converted tensors passed in
-        # H matrices are GCN outputs
         Z_w = M_w_t @ H_w
         Z_e = M_e_t @ H_e
         Z_p = M_p_t @ H_p
@@ -180,7 +181,6 @@ if __name__ == "__main__":
     print(f"Train labeled: {len(train_labeled_idx)}")
     print(f"Val: {len(val_idx)}")
     print(f"Test: {len(test_idx)}")
-    print(f"Sum check: {len(train_labeled_idx) + len(val_idx) + len(test_idx)}")
 
     # Load preprocessed data
     base = f"data/processed/{args.dataset}"
@@ -195,6 +195,14 @@ if __name__ == "__main__":
     labels_tensor = torch.tensor(all_labels, dtype=torch.long)
     print(f"Label distribution in train: {torch.bincount(labels_tensor[torch.tensor(train_labeled_idx)])}")
     print(f"Label distribution overall:  {torch.bincount(labels_tensor)}")
+    
+    class_counts = torch.bincount(
+        labels_tensor[torch.tensor(train_labeled_idx)]
+    ).float()
+
+    weights = 1.0 / class_counts
+    weights = weights / weights.sum()
+    print("Class weights:", weights)
 
     config = {
         "glove_path": "data/external/glove/glove.pkl",
@@ -240,8 +248,13 @@ if __name__ == "__main__":
     # Run SVD
     print("Running SVD...")
     M_wr, M_er, M_pr = trainer.run_svd(M_w, M_e, M_p)
+    
+    # SVD views
+    M_wr_t = torch.tensor(M_wr, dtype=torch.float32)
+    M_er_t = torch.tensor(M_er, dtype=torch.float32)
+    M_pr_t = torch.tensor(M_pr, dtype=torch.float32)
 
-    # Cconvert TD matrices to tensors
+    # Convert TD matrices to tensors
     M_w_t = torch.tensor(M_w,  dtype=torch.float32)
     M_e_t = torch.tensor(M_e,  dtype=torch.float32)
     M_p_t = torch.tensor(M_p,  dtype=torch.float32)
@@ -265,8 +278,23 @@ if __name__ == "__main__":
         train_labeled_idx,
         train_labels_only
     )
-    weak_labels_tensor = torch.tensor(weak_labels, dtype=torch.long)
-    print(f"K-means done. Weak label distribution: {torch.bincount(weak_labels_tensor)}")
+    
+    weak_labels_tensor = torch.full(
+        (len(weak_labels),),
+        -1,
+        dtype=torch.long
+    )
+
+    weak_labels_np = np.array(weak_labels)
+    cluster_counts = np.bincount(weak_labels_np[weak_labels_np >= 0])
+
+    for i, label in enumerate(weak_labels):
+        if label >= 0 and cluster_counts[label] < 0.9 * len(weak_labels):
+            weak_labels_tensor[i] = label
+
+    # Preserve true labels
+    for idx in train_labeled_idx:
+        weak_labels_tensor[idx] = labels_tensor[idx]
 
     # Optimizer covers all trainable parameters
     optimizer = torch.optim.Adam(
@@ -274,7 +302,7 @@ if __name__ == "__main__":
         list(trainer.gcn_w.parameters()) +
         list(trainer.gcn_e.parameters()) +
         list(trainer.gcn_p.parameters()),
-        lr=1e-3
+        lr=1e-3 # Learning rate 0.001
     )
 
     metrics = {"train_loss": [], "val_acc": [], "val_f1": []}
@@ -296,6 +324,37 @@ if __name__ == "__main__":
             M_w_t, M_e_t, M_p_t, M_wr_t, M_er_t, M_pr_t,
             H_w, H_e, H_p
         )
+        
+        Z_org.shape[1] == config["input_dim"]
+        print("Z_org shape:", Z_org.shape)
+        
+        # Allow clusters to envolve with embedddings
+        if epoch % 10 == 0:
+            with torch.no_grad():
+                weak_labels = trainer.run_kmeans(
+                    Z_org.detach().cpu().numpy(),
+                    train_labeled_idx,
+                    labels_tensor[train_labeled_idx]
+                )
+
+            weak_labels_tensor = torch.full(
+                (len(weak_labels),),
+                -1,
+                dtype=torch.long
+            )
+
+            weak_labels_np = np.array(weak_labels)
+            cluster_counts = np.bincount(weak_labels_np[weak_labels_np >= 0])
+
+            for i, label in enumerate(weak_labels):
+                if label >= 0 and cluster_counts[label] < 0.9 * len(weak_labels):
+                    weak_labels_tensor[i] = label
+
+            # Preserve labels
+            for idx in train_labeled_idx:
+                weak_labels_tensor[idx] = labels_tensor[idx]
+
+            print("Refreshed k-means labels")
 
         outputs = trainer.model(
             Z_org,
