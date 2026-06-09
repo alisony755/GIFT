@@ -17,7 +17,6 @@ class ConstrainedSeedKMeans:
         print(f"  n_seeds: {len(seed_indices)}")
         print(f"  n_clusters: {self.num_clusters}")
         print(f"  diff array would be: ({len(embeddings) - len(seed_indices)}, {self.num_clusters}, {embeddings.shape[1]})")
-        print(f"  estimated memory: {(len(embeddings) * self.num_clusters * embeddings.shape[1] * 4) / 1e9:.2f} GB")
         embeddings = np.asarray(embeddings, dtype=np.float32)
         n_samples = embeddings.shape[0]
 
@@ -40,8 +39,6 @@ class ConstrainedSeedKMeans:
         unlabeled_idx = np.where(unlabeled_mask)[0]
 
         for i in range(self.max_iter):
-            print(f"  k-means iter {i+1}")
-            t0 = time.time()
             old_centroids = centroids.copy()
 
             X = embeddings[unlabeled_idx]
@@ -50,17 +47,13 @@ class ConstrainedSeedKMeans:
             cross = X @ centroids.T
             distances = np.sqrt(np.maximum(X_sq - 2 * cross + C_sq.T, 0))
             labels[unlabeled_idx] = np.argmin(distances, axis=1)
-            print(f"  iter {i+1} distances: {time.time()-t0:.3f}s")
 
-            t1 = time.time()
             for k in range(self.num_clusters):
                 members = embeddings[labels == k]
                 if len(members) > 0:
                     centroids[k] = members.mean(axis=0)
-            print(f"  iter {i+1} centroid update: {time.time()-t1:.3f}s")
 
             shift = np.linalg.norm(centroids - old_centroids)
-            print(f"  iter {i+1} shift: {shift:.6f}")
 
             if shift < self.tol:
                 break

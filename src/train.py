@@ -44,7 +44,6 @@ class GIFTTrainer:
         self.entity_graph_builder = EntityGraphBuilder(config["transe_path"], config["mapping_path"])
         self.pos_graph_builder = POSGraphBuilder()
         self.td_builder = TDMatrixBuilder()
-        self.encoder = TextEncoder()
         self.svd = SVDViewGenerator(k=config["svd_k"])
 
         self.model = GIFTModel(
@@ -328,33 +327,42 @@ if __name__ == "__main__":
         Z_org.shape[1] == config["input_dim"]
         print("Z_org shape:", Z_org.shape)
         
-        # Allow clusters to envolve with embedddings
-        if epoch % 10 == 0:
-            with torch.no_grad():
-                weak_labels = trainer.run_kmeans(
-                    Z_org.detach().cpu().numpy(),
-                    train_labeled_idx,
-                    labels_tensor[train_labeled_idx]
-                )
-
-            weak_labels_tensor = torch.full(
-                (len(weak_labels),),
-                -1,
-                dtype=torch.long
+        # Run k-means every epoch on current Z_org
+        with torch.no_grad():
+            weak_labels = trainer.run_kmeans(
+                Z_org.detach().cpu().numpy(),
+                train_labeled_idx,
+                labels_tensor[train_labeled_idx]
             )
+        weak_labels_tensor = torch.tensor(weak_labels, dtype=torch.long)
+        
+        # Allow clusters to envolve with embedddings
+        # if epoch % 10 == 0:
+        #     with torch.no_grad():
+        #         (weak_labels = trainer.run_kmeans
+        #             Z_org.detach().cpu().numpy(),
+        #             train_labeled_idx,
+        #             labels_tensor[train_labeled_idx]
+        #         )
 
-            weak_labels_np = np.array(weak_labels)
-            cluster_counts = np.bincount(weak_labels_np[weak_labels_np >= 0])
+        #     weak_labels_tensor = torch.full(
+        #         (len(weak_labels),),
+        #         -1,
+        #         dtype=torch.long
+        #     )
 
-            for i, label in enumerate(weak_labels):
-                if label >= 0 and cluster_counts[label] < 0.9 * len(weak_labels):
-                    weak_labels_tensor[i] = label
+        #     weak_labels_np = np.array(weak_labels)
+        #     cluster_counts = np.bincount(weak_labels_np[weak_labels_np >= 0])
 
-            # Preserve labels
-            for idx in train_labeled_idx:
-                weak_labels_tensor[idx] = labels_tensor[idx]
+        #     for i, label in enumerate(weak_labels):
+        #         if label >= 0 and cluster_counts[label] < 0.9 * len(weak_labels):
+        #             weak_labels_tensor[i] = label
 
-            print("Refreshed k-means labels")
+        #     # Preserve labels
+        #     for idx in train_labeled_idx:
+        #         weak_labels_tensor[idx] = labels_tensor[idx]
+
+        #     print("Refreshed k-means labels")
 
         outputs = trainer.model(
             Z_org,

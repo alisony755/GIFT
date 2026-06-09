@@ -15,22 +15,21 @@ class PMIBuilder:
 
         total_docs = len(documents)
 
+        window_size = 5
+
         for doc_nodes in documents:
-            unique_nodes = set(doc_nodes)
+            for i in range(len(doc_nodes)):
+                window = doc_nodes[i:i + window_size]
+                unique_nodes = set(window)
+                for node in unique_nodes:
+                    node_count[node] += 1
+                for n1, n2 in combinations(sorted(unique_nodes), 2):
+                    pair_count[(n1, n2)] += 1
 
-            for node in unique_nodes:
-                node_count[node] += 1
-
-            for n1, n2 in combinations(
-                sorted(unique_nodes),
-                2
-            ):
-                pair_count[(n1, n2)] += 1
-
-        A = np.zeros(
-            (len(nodes), len(nodes)),
-            dtype=np.float32
-        )
+                A = np.zeros(
+                    (len(nodes), len(nodes)),
+                    dtype=np.float32
+                )
 
         for (n1, n2), cooccur in pair_count.items():
             p_i = node_count[n1] / total_docs
