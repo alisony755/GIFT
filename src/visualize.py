@@ -94,8 +94,6 @@ if __name__ == "__main__":
     entities = load_pickle(f"{base}/train_entities.pkl")
     vocab = load_pickle(f"{base}/train_vocab.pkl")
 
-    parser.add_argument("--num_classes", type=int, default=2)
-
     config = {
         "glove_path": "data/external/glove/glove.pkl",
         "transe_path": "data/external/NELL_KG/transe.pkl",
@@ -109,6 +107,7 @@ if __name__ == "__main__":
         "eta": 0.5,
         "zeta": 0.5,
         "batch_size": 256,
+        "dropout": 0.9,
     }
     
     config["num_classes"] = args.num_classes

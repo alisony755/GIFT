@@ -66,6 +66,7 @@ if __name__ == "__main__":
         "eta": 0.5,
         "zeta": 0.5,
         "batch_size": 256,
+        "dropout": 0.9,
     }
 
     trainer = GIFTTrainer(config)

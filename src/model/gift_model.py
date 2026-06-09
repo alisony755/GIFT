@@ -80,10 +80,10 @@ class GIFTModel(nn.Module):
         print(f"  L_ccl: {L_ccl.item():.4f}")
 
         # Eq. 8
-        logits = self.classifier(Z_org)
-        labeled_logits = logits[labeled_indices]
+        logits_org = self.classifier(Z_org)
+        logits_aug = self.classifier(Z_aug)
         labeled_true = true_labels[labeled_indices]
-        L_ce = self.cross_entropy(labeled_logits, labeled_true)
+        L_ce = self.cross_entropy(logits_org[labeled_indices], labeled_true)
         print(f"  L_ce: {L_ce.item():.4f}")
 
         # Eq. 9
@@ -99,7 +99,7 @@ class GIFTModel(nn.Module):
             "contrastive_loss": L_cl,
             "cluster_loss": L_ccl,
             "classification_loss": L_ce,
-            "logits": logits
+            "logits": logits_org
         }
         
     # Returns logits

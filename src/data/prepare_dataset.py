@@ -67,7 +67,7 @@ def save_pickle(path, obj):
 #         print(f"Saved {split_name}")
 
 def prepare_dataset(dataset_name):
-    dataset_path = f"data/original/{dataset_name}/{dataset_name.lower()}_split.json"
+    dataset_path = f"data/original/{dataset_name.lower()}/{dataset_name.lower()}_split.json"
 
     with open("data/external/NELL_KG/ent2ids_refined.pkl", "rb") as f:
         ent2ids = pickle.load(f)

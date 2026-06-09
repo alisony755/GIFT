@@ -68,15 +68,18 @@ class GIFTTrainer:
         # Creates GCN models and stores them on trainer
         self.gcn_w = GCNEncoder(
             input_dim=word_graph.X.shape[1],
-            hidden_dim=self.config["hidden_dim"]
+            hidden_dim=self.config["hidden_dim"],
+            dropout=self.config.get("dropout", 0.9)
         )
         self.gcn_e = GCNEncoder(
             input_dim=entity_graph.X.shape[1],
-            hidden_dim=self.config["hidden_dim"]
+            hidden_dim=self.config["hidden_dim"],
+            dropout=self.config.get("dropout", 0.9)
         )
         self.gcn_p = GCNEncoder(
             input_dim=pos_graph.X.shape[1],
-            hidden_dim=self.config["hidden_dim"]
+            hidden_dim=self.config["hidden_dim"],
+            dropout=self.config.get("dropout", 0.9)
         )
 
     def run_gcn(self, X_w, A_w, X_e, A_e, X_p, A_p):
@@ -152,6 +155,11 @@ def load_dataset(dataset_name):
     train_labeled_idx = idx_data["train"]
     val_idx = idx_data["valid"]
     test_idx = idx_data["test"]
+    
+    # Remap labels to 0-indexed if they start at 1
+    min_label = min(all_labels)
+    if min_label > 0:
+        all_labels = [l - min_label for l in all_labels]
 
     return {
         "all_texts": all_texts,
@@ -218,6 +226,7 @@ if __name__ == "__main__":
         "eta": 0.5,
         "zeta": 0.5,
         "batch_size": 256,
+        "dropout": 0.9,
     }
     
     trainer = GIFTTrainer(config)
@@ -303,7 +312,8 @@ if __name__ == "__main__":
         list(trainer.gcn_w.parameters()) +
         list(trainer.gcn_e.parameters()) +
         list(trainer.gcn_p.parameters()),
-        lr=1e-3 # Learning rate 0.001
+        lr=1e-3, # Learning rate
+        weight_decay=5e-4
     )
 
     metrics = {"train_loss": [], "val_acc": [], "val_f1": []}
