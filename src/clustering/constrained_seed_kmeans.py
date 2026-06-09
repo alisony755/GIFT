@@ -12,11 +12,6 @@ class ConstrainedSeedKMeans:
         self.tol = tol
 
     def fit_predict(self, embeddings, seed_indices, seed_labels):
-        print(f"  embeddings shape: {embeddings.shape}")
-        print(f"  embeddings dtype: {embeddings.dtype}")
-        print(f"  n_seeds: {len(seed_indices)}")
-        print(f"  n_clusters: {self.num_clusters}")
-        print(f"  diff array would be: ({len(embeddings) - len(seed_indices)}, {self.num_clusters}, {embeddings.shape[1]})")
         embeddings = np.asarray(embeddings, dtype=np.float32)
         n_samples = embeddings.shape[0]
 

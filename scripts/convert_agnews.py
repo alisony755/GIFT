@@ -27,27 +27,40 @@ def load_csv(path):
             data.append({"text": text, "label": label})
     return data
 
-def convert():
-    print("Downloading AGNews CSV...")
+import random
 
-    os.makedirs("data/agnews/raw", exist_ok=True)
+def convert(max_train=10000, max_test=1000, seed=42):
+    random.seed(seed)
 
     train_path = "data/original/agnews/raw/train.csv"
     test_path = "data/original/agnews/raw/test.csv"
-
-    download(AGNEWS_URLS["train"], train_path)
-    download(AGNEWS_URLS["test"], test_path)
-
+    
     train = load_csv(train_path)
     test = load_csv(test_path)
 
+    # Subsample while keeping class balance
+    by_class = {}
+    for item in train:
+        by_class.setdefault(item["label"], []).append(item)
+    
+    per_class = max_train // 4
+    subsampled_train = []
+    for items in by_class.values():
+        random.shuffle(items)
+        subsampled_train.extend(items[:per_class])
+    random.shuffle(subsampled_train)
+
+    # Subsample test too
+    random.shuffle(test)
+    subsampled_test = test[:max_test]
+
     split_data = {
-        "train": {str(i): x for i, x in enumerate(train)},
-        "test": {str(i): x for i, x in enumerate(test)},
+        "train": {str(i): x for i, x in enumerate(subsampled_train)},
+        "test": {str(i): x for i, x in enumerate(subsampled_test)},
     }
 
     idx_split = make_split(split_data, num_classes=4)
-
+ 
     with open(os.path.join(PROC_DIR, "agnews_split.json"), "w") as f:
         json.dump(split_data, f)
 

@@ -69,17 +69,14 @@ class GIFTTrainer:
         self.gcn_w = GCNEncoder(
             input_dim=word_graph.X.shape[1],
             hidden_dim=self.config["hidden_dim"],
-            dropout=self.config.get("dropout", 0.9)
         )
         self.gcn_e = GCNEncoder(
             input_dim=entity_graph.X.shape[1],
             hidden_dim=self.config["hidden_dim"],
-            dropout=self.config.get("dropout", 0.9)
         )
         self.gcn_p = GCNEncoder(
             input_dim=pos_graph.X.shape[1],
             hidden_dim=self.config["hidden_dim"],
-            dropout=self.config.get("dropout", 0.9)
         )
 
     def run_gcn(self, X_w, A_w, X_e, A_e, X_p, A_p):
@@ -225,8 +222,7 @@ if __name__ == "__main__":
         "projection_dim": 128,
         "eta": 0.5,
         "zeta": 0.5,
-        "batch_size": 256,
-        "dropout": 0.9,
+        "batch_size": 256 * (args.num_classes // 2)
     }
     
     trainer = GIFTTrainer(config)
@@ -313,14 +309,14 @@ if __name__ == "__main__":
         list(trainer.gcn_e.parameters()) +
         list(trainer.gcn_p.parameters()),
         lr=1e-3, # Learning rate
-        weight_decay=5e-4
     )
 
     metrics = {"train_loss": [], "val_acc": [], "val_f1": []}
     print("Labeled sample classes:", labels_tensor[torch.tensor(train_labeled_idx)])
     
+    best_val_acc = 0
     num_epochs = 50
-
+    
     for epoch in range(num_epochs):
         # Training step
         trainer.model.train()
@@ -347,34 +343,6 @@ if __name__ == "__main__":
                 labels_tensor[train_labeled_idx]
             )
         weak_labels_tensor = torch.tensor(weak_labels, dtype=torch.long)
-        
-        # Allow clusters to envolve with embedddings
-        # if epoch % 10 == 0:
-        #     with torch.no_grad():
-        #         (weak_labels = trainer.run_kmeans
-        #             Z_org.detach().cpu().numpy(),
-        #             train_labeled_idx,
-        #             labels_tensor[train_labeled_idx]
-        #         )
-
-        #     weak_labels_tensor = torch.full(
-        #         (len(weak_labels),),
-        #         -1,
-        #         dtype=torch.long
-        #     )
-
-        #     weak_labels_np = np.array(weak_labels)
-        #     cluster_counts = np.bincount(weak_labels_np[weak_labels_np >= 0])
-
-        #     for i, label in enumerate(weak_labels):
-        #         if label >= 0 and cluster_counts[label] < 0.9 * len(weak_labels):
-        #             weak_labels_tensor[i] = label
-
-        #     # Preserve labels
-        #     for idx in train_labeled_idx:
-        #         weak_labels_tensor[idx] = labels_tensor[idx]
-
-        #     print("Refreshed k-means labels")
 
         outputs = trainer.model(
             Z_org,
@@ -415,13 +383,19 @@ if __name__ == "__main__":
         metrics["val_acc"].append(val_acc)
         metrics["val_f1"].append(val_f1)
 
-        print(f"Epoch {epoch+1:02d} | Loss: {loss.item():.4f} | Val Acc: {val_acc:.4f} | Val F1: {val_f1:.4f}")
-
-    # Save results
-    os.makedirs("results", exist_ok=True)
-    with open(f"results/{args.dataset}_history.json", "w") as f:
-        json.dump(metrics, f)
-
+        # Save best model based on val accuracy
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            torch.save({
+                "model": trainer.model.state_dict(),
+                "gcn_w": trainer.gcn_w.state_dict(),
+                "gcn_e": trainer.gcn_e.state_dict(),
+                "gcn_p": trainer.gcn_p.state_dict(),
+            }, f"saved_models/{args.dataset}_gift_best.pt")
+ 
+        print(f"Epoch {epoch+1:02d} | Loss: {loss.item():.4f} | Val Acc: {val_acc:.4f} | Val F1: {val_f1:.4f} | Best: {best_val_acc:.4f}")
+ 
+    # Save final model (separate from best)
     os.makedirs("saved_models", exist_ok=True)
     torch.save({
         "model": trainer.model.state_dict(),
@@ -429,4 +403,6 @@ if __name__ == "__main__":
         "gcn_e": trainer.gcn_e.state_dict(),
         "gcn_p": trainer.gcn_p.state_dict(),
     }, f"saved_models/{args.dataset}_gift.pt")
-    print("Model saved.")
+    print(f"Training complete. Best val acc: {best_val_acc:.4f}")
+    print("Models saved.")
+ 

@@ -106,9 +106,15 @@ if __name__ == "__main__":
         "projection_dim": 128,
         "eta": 0.5,
         "zeta": 0.5,
-        "batch_size": 256,
-        "dropout": 0.9,
     }
+    
+    BATCH_SIZES = {
+        "MR": 256,
+        "Twitter": 256,
+        "snippets": 512,
+        "StackOverflow": 1024,
+    }
+    config["batch_size"] = BATCH_SIZES.get(args.dataset, 256)
     
     config["num_classes"] = args.num_classes
 
@@ -117,7 +123,7 @@ if __name__ == "__main__":
     trainer.init_gcn(word_graph, entity_graph, pos_graph)
 
     # Load saved model weights
-    checkpoint = torch.load(f"saved_models/{args.dataset}_gift.pt", weights_only=True)
+    checkpoint = torch.load(f"saved_models/{args.dataset.lower()}/{args.dataset}_gift_best.pt", weights_only=True)
     trainer.model.load_state_dict(checkpoint["model"], strict=True)
     trainer.gcn_w.load_state_dict(checkpoint["gcn_w"])
     trainer.gcn_e.load_state_dict(checkpoint["gcn_e"])
