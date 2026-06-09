@@ -395,6 +395,11 @@ if __name__ == "__main__":
  
         print(f"Epoch {epoch+1:02d} | Loss: {loss.item():.4f} | Val Acc: {val_acc:.4f} | Val F1: {val_f1:.4f} | Best: {best_val_acc:.4f}")
  
+    # Save results
+    os.makedirs("results", exist_ok=True)
+    with open(f"results/{args.dataset}_history.json", "w") as f:
+        json.dump(metrics, f)
+
     # Save final model (separate from best)
     os.makedirs("saved_models", exist_ok=True)
     torch.save({

@@ -8,7 +8,7 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from src.train import load_dataset, load_pickle, GIFTTrainer
 
 def plot_curves(dataset_name):
-    with open(f"results/{dataset_name}/{dataset_name}_history.json") as f:
+    with open(f"results/{dataset_name}_history.json") as f:
         history = json.load(f)
 
     epochs = range(1, len(history["train_loss"]) + 1)
@@ -20,7 +20,7 @@ def plot_curves(dataset_name):
     plt.title(f"{dataset_name} — Loss Curve")
     plt.legend()
     plt.tight_layout()
-    plt.savefig(f"results/{dataset_name}/{dataset_name}_loss.png")
+    plt.savefig(f"results/{dataset_name}_loss.png")
     plt.close()
     print("Saved loss curve.")
 
@@ -32,7 +32,7 @@ def plot_curves(dataset_name):
     plt.title(f"{dataset_name} — Validation Accuracy & F1")
     plt.legend()
     plt.tight_layout()
-    plt.savefig(f"results/{dataset_name}/{dataset_name}_accuracy.png")
+    plt.savefig(f"results/{dataset_name}_accuracy.png")
     plt.close()
     print("Saved accuracy curve.")
 
@@ -52,7 +52,7 @@ def plot_confusion_matrix(model, Z_org, test_idx, true_labels, dataset_name, cla
     disp.plot(ax=ax, colorbar=False, cmap="Blues")
     plt.title(f"{dataset_name} — Confusion Matrix")
     plt.tight_layout()
-    plt.savefig(f"results/{dataset_name}/{dataset_name}_confusion.png")
+    plt.savefig(f"results/{dataset_name}_confusion.png")
     plt.close()
     print("Saved confusion matrix.")
 
@@ -123,7 +123,7 @@ if __name__ == "__main__":
     trainer.init_gcn(word_graph, entity_graph, pos_graph)
 
     # Load saved model weights
-    checkpoint = torch.load(f"saved_models/{args.dataset.lower()}/{args.dataset}_gift_best.pt", weights_only=True)
+    checkpoint = torch.load(f"saved_models/{args.dataset}_gift_best.pt", weights_only=True)
     trainer.model.load_state_dict(checkpoint["model"], strict=True)
     trainer.gcn_w.load_state_dict(checkpoint["gcn_w"])
     trainer.gcn_e.load_state_dict(checkpoint["gcn_e"])
