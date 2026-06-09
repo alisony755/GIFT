@@ -124,6 +124,7 @@ def load_pickle(path):
 
 
 def load_dataset(dataset_name):
+    # Load datasets
     split_path = f"data/original/{dataset_name}/{dataset_name.lower()}_split.json"
     idx_path = f"data/original/{dataset_name}/{dataset_name.lower()}_idx_split.json"
 
@@ -166,6 +167,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, required=True)
+    parser.add_argument("--num_classes", type=int, default=2)
     args = parser.parse_args()
 
     # Load dataset
@@ -210,14 +212,14 @@ if __name__ == "__main__":
         "svd_k": 15,
         "temp": 0.5,
         "input_dim": 384,
-        "num_classes": 2,
+        "num_classes": args.num_classes,
         "hidden_dim": 128,
         "projection_dim": 128,
         "eta": 0.5,
         "zeta": 0.5,
         "batch_size": 256,
     }
-
+    
     trainer = GIFTTrainer(config)
 
     # Build graphs

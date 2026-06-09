@@ -8,7 +8,7 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from src.train import load_dataset, load_pickle, GIFTTrainer
 
 def plot_curves(dataset_name):
-    with open(f"results/{dataset_name}_history.json") as f:
+    with open(f"results/{dataset_name}/{dataset_name}_history.json") as f:
         history = json.load(f)
 
     epochs = range(1, len(history["train_loss"]) + 1)
@@ -20,7 +20,7 @@ def plot_curves(dataset_name):
     plt.title(f"{dataset_name} — Loss Curve")
     plt.legend()
     plt.tight_layout()
-    plt.savefig(f"results/{dataset_name}_loss.png")
+    plt.savefig(f"results/{dataset_name}/{dataset_name}_loss.png")
     plt.close()
     print("Saved loss curve.")
 
@@ -32,7 +32,7 @@ def plot_curves(dataset_name):
     plt.title(f"{dataset_name} — Validation Accuracy & F1")
     plt.legend()
     plt.tight_layout()
-    plt.savefig(f"results/{dataset_name}_accuracy.png")
+    plt.savefig(f"results/{dataset_name}/{dataset_name}_accuracy.png")
     plt.close()
     print("Saved accuracy curve.")
 
@@ -52,7 +52,7 @@ def plot_confusion_matrix(model, Z_org, test_idx, true_labels, dataset_name, cla
     disp.plot(ax=ax, colorbar=False, cmap="Blues")
     plt.title(f"{dataset_name} — Confusion Matrix")
     plt.tight_layout()
-    plt.savefig(f"results/{dataset_name}_confusion.png")
+    plt.savefig(f"results/{dataset_name}/{dataset_name}_confusion.png")
     plt.close()
     print("Saved confusion matrix.")
 
@@ -82,6 +82,7 @@ def rebuild_embeddings(trainer, word_graph, entity_graph, pos_graph, all_texts, 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, required=True)
+    parser.add_argument("--num_classes", type=int, default=2) 
     args = parser.parse_args()
 
     os.makedirs("results", exist_ok=True)
@@ -93,6 +94,8 @@ if __name__ == "__main__":
     entities = load_pickle(f"{base}/train_entities.pkl")
     vocab = load_pickle(f"{base}/train_vocab.pkl")
 
+    parser.add_argument("--num_classes", type=int, default=2)
+
     config = {
         "glove_path": "data/external/glove/glove.pkl",
         "transe_path": "data/external/NELL_KG/transe.pkl",
@@ -100,13 +103,15 @@ if __name__ == "__main__":
         "svd_k": 15,
         "temp": 0.5,
         "input_dim": 384,
-        "num_classes": 2,
+        "num_classes": args.num_classes,
         "hidden_dim": 128,
         "projection_dim": 128,
         "eta": 0.5,
         "zeta": 0.5,
         "batch_size": 256,
     }
+    
+    config["num_classes"] = args.num_classes
 
     trainer = GIFTTrainer(config)
     word_graph, entity_graph, pos_graph = trainer.build_graphs(tokens, entities, pos)
@@ -127,7 +132,6 @@ if __name__ == "__main__":
 
     # Build graphs and init GCN before running
     word_graph, entity_graph, pos_graph = trainer.build_graphs(tokens, entities, pos)
-    trainer.init_gcn(word_graph, entity_graph, pos_graph)
 
     # Rebuild embeddings
     Z_org = rebuild_embeddings(
@@ -138,11 +142,15 @@ if __name__ == "__main__":
     # Plot curves
     plot_curves(args.dataset)
 
-    # UPDATE CLASS NAMES PER DATASET
-    # MR/Twitter: ["negative", "positive"]
-    # Snippets: None (8 classes, let sklearn use numbers)
-    # StackOverflow: None (20 classes)
-    class_names = ["negative", "positive"]
+    # Dataset class names
+    CLASS_NAMES = {
+        "MR": ["negative", "positive"],
+        "Twitter": ["negative", "positive"],
+        "snippets": None,
+        "StackOverflow": None,
+        "agnews": ["World", "Sports", "Business", "Sci/Tech"],
+    }
+    class_names = CLASS_NAMES.get(args.dataset, None)
 
     plot_confusion_matrix(
         trainer.model,

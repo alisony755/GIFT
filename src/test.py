@@ -43,6 +43,7 @@ def rebuild_embeddings(trainer, word_graph, entity_graph, pos_graph, all_texts, 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, required=True)
+    parser.add_argument("--num_classes", type=int, default=2)
     args = parser.parse_args()
 
     data = load_dataset(args.dataset)
@@ -59,7 +60,7 @@ if __name__ == "__main__":
         "svd_k": 15,
         "temp": 0.5,
         "input_dim": 384,
-        "num_classes": 2,
+        "num_classes": args.num_classes,
         "hidden_dim": 128,
         "projection_dim": 128,
         "eta": 0.5,
