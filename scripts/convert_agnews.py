@@ -29,7 +29,7 @@ def load_csv(path):
 
 import random
 
-def convert(max_train=10000, max_test=1000, seed=42):
+def convert(max_train=4000, max_test=1000, seed=42):
     random.seed(seed)
 
     train_path = "data/original/agnews/raw/train.csv"

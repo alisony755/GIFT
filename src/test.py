@@ -1,3 +1,5 @@
+import glob
+import os
 import torch
 import json
 import argparse
@@ -44,6 +46,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, required=True)
     parser.add_argument("--num_classes", type=int, default=2)
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
     data = load_dataset(args.dataset)
@@ -80,7 +83,7 @@ if __name__ == "__main__":
     trainer.init_gcn(word_graph, entity_graph, pos_graph)
 
     # Load saved model weights
-    checkpoint = torch.load(f"saved_models/{args.dataset}_gift_best.pt", weights_only=True)
+    checkpoint = torch.load(f"saved_models/{args.dataset}_seed{args.seed}_gift_best.pt", weights_only=True)
     trainer.model.load_state_dict(checkpoint["model"], strict=True)
     trainer.gcn_w.load_state_dict(checkpoint["gcn_w"])
     trainer.gcn_e.load_state_dict(checkpoint["gcn_e"])
@@ -108,3 +111,15 @@ if __name__ == "__main__":
 
     print(f"Test Accuracy: {acc*100:.2f}%")
     print(f"Test Macro-F1: {f1*100:.2f}%")
+    
+    # Save per-seed result
+    os.makedirs("results", exist_ok=True)
+    result = {
+        "dataset": args.dataset,
+        "seed": args.seed,
+        "test_acc": acc,
+        "test_f1": f1
+    }
+    with open(f"results/{args.dataset}_seed{args.seed}_test.json", "w") as f:
+        json.dump(result, f)
+    print(f"Saved result to results/{args.dataset}_seed{args.seed}_test.json")

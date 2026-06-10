@@ -1,4 +1,6 @@
+import argparse
 import os
+import random
 import numpy as np
 import torch
 import pickle
@@ -168,12 +170,16 @@ def load_dataset(dataset_name):
 
 
 if __name__ == "__main__":
-    import argparse
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, required=True)
     parser.add_argument("--num_classes", type=int, default=2)
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
+    
+    # Ensure same results generated for same seed
+    torch.manual_seed(args.seed)
+    random.seed(args.seed)
+    np.random.seed(args.seed)
 
     # Load dataset
     data = load_dataset(args.dataset)
@@ -391,13 +397,13 @@ if __name__ == "__main__":
                 "gcn_w": trainer.gcn_w.state_dict(),
                 "gcn_e": trainer.gcn_e.state_dict(),
                 "gcn_p": trainer.gcn_p.state_dict(),
-            }, f"saved_models/{args.dataset}_gift_best.pt")
+            }, f"saved_models/{args.dataset}_seed{args.seed}_gift_best.pt")
  
         print(f"Epoch {epoch+1:02d} | Loss: {loss.item():.4f} | Val Acc: {val_acc:.4f} | Val F1: {val_f1:.4f} | Best: {best_val_acc:.4f}")
  
     # Save results
     os.makedirs("results", exist_ok=True)
-    with open(f"results/{args.dataset}_history.json", "w") as f:
+    with open(f"results/{args.dataset}_seed{args.seed}_history.json", "w") as f:
         json.dump(metrics, f)
 
     # Save final model (separate from best)
@@ -407,7 +413,7 @@ if __name__ == "__main__":
         "gcn_w": trainer.gcn_w.state_dict(),
         "gcn_e": trainer.gcn_e.state_dict(),
         "gcn_p": trainer.gcn_p.state_dict(),
-    }, f"saved_models/{args.dataset}_gift.pt")
+    }, f"saved_models/{args.dataset}_seed{args.seed}_gift.pt")
     print(f"Training complete. Best val acc: {best_val_acc:.4f}")
     print("Models saved.")
  

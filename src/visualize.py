@@ -1,14 +1,16 @@
+import glob
 import os
 import json
 import argparse
+import numpy as np
 import torch
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 from src.train import load_dataset, load_pickle, GIFTTrainer
 
-def plot_curves(dataset_name):
-    with open(f"results/{dataset_name}_history.json") as f:
+def plot_curves(dataset_name, seed):
+    with open(f"results/{dataset_name}_seed{seed}_history.json") as f:
         history = json.load(f)
 
     epochs = range(1, len(history["train_loss"]) + 1)
@@ -20,7 +22,7 @@ def plot_curves(dataset_name):
     plt.title(f"{dataset_name} — Loss Curve")
     plt.legend()
     plt.tight_layout()
-    plt.savefig(f"results/{dataset_name}_loss.png")
+    plt.savefig(f"results/{dataset_name}_seed{seed}_loss.png")
     plt.close()
     print("Saved loss curve.")
 
@@ -32,12 +34,12 @@ def plot_curves(dataset_name):
     plt.title(f"{dataset_name} — Validation Accuracy & F1")
     plt.legend()
     plt.tight_layout()
-    plt.savefig(f"results/{dataset_name}_accuracy.png")
+    plt.savefig(f"results/{dataset_name}_seed{seed}_accuracy.png")
     plt.close()
     print("Saved accuracy curve.")
 
 
-def plot_confusion_matrix(model, Z_org, test_idx, true_labels, dataset_name, class_names=None):
+def plot_confusion_matrix(model, Z_org, test_idx, true_labels, dataset_name, seed, class_names=None):
     model.eval()
     with torch.no_grad():
         Z = Z_org[test_idx]
@@ -52,7 +54,7 @@ def plot_confusion_matrix(model, Z_org, test_idx, true_labels, dataset_name, cla
     disp.plot(ax=ax, colorbar=False, cmap="Blues")
     plt.title(f"{dataset_name} — Confusion Matrix")
     plt.tight_layout()
-    plt.savefig(f"results/{dataset_name}_confusion.png")
+    plt.savefig(f"results/{dataset_name}_seed{seed}_confusion.png")
     plt.close()
     print("Saved confusion matrix.")
 
@@ -79,11 +81,29 @@ def rebuild_embeddings(trainer, word_graph, entity_graph, pos_graph, all_texts, 
         )
     return Z_org
 
+def find_median_seed(dataset_name):
+    paths = sorted(glob.glob(f"results/{dataset_name}_seed*_test.json"))
+    if not paths:
+        raise FileNotFoundError(f"No test results found for {dataset_name}")
+
+    accs, seeds = [], []
+    for path in paths:
+        with open(path) as f:
+            r = json.load(f)
+        accs.append(r["test_acc"])
+        seeds.append(r["seed"])
+
+    mean_acc = np.mean(accs)
+    median_seed = seeds[np.argmin([abs(a - mean_acc) for a in accs])]
+    print(f"Auto-selected seed {median_seed} (closest to mean {mean_acc*100:.2f}%)")
+    return median_seed
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, required=True)
-    parser.add_argument("--num_classes", type=int, default=2) 
+    parser.add_argument("--num_classes", type=int, default=2)
     args = parser.parse_args()
+    seed = find_median_seed(args.dataset)
 
     os.makedirs("results", exist_ok=True)
 
@@ -123,7 +143,11 @@ if __name__ == "__main__":
     trainer.init_gcn(word_graph, entity_graph, pos_graph)
 
     # Load saved model weights
-    checkpoint = torch.load(f"saved_models/{args.dataset}_gift_best.pt", weights_only=True)
+    checkpoint = torch.load(
+        f"saved_models/{args.dataset}_seed{seed}_gift_best.pt",
+        weights_only=True
+    )
+    
     trainer.model.load_state_dict(checkpoint["model"], strict=True)
     trainer.gcn_w.load_state_dict(checkpoint["gcn_w"])
     trainer.gcn_e.load_state_dict(checkpoint["gcn_e"])
@@ -135,9 +159,6 @@ if __name__ == "__main__":
     trainer.gcn_e.eval()
     trainer.gcn_p.eval()
 
-    # Build graphs and init GCN before running
-    word_graph, entity_graph, pos_graph = trainer.build_graphs(tokens, entities, pos)
-
     # Rebuild embeddings
     Z_org = rebuild_embeddings(
         trainer, word_graph, entity_graph, pos_graph,
@@ -145,7 +166,7 @@ if __name__ == "__main__":
     )
 
     # Plot curves
-    plot_curves(args.dataset)
+    plot_curves(args.dataset, seed)
 
     # Dataset class names
     CLASS_NAMES = {
@@ -163,6 +184,7 @@ if __name__ == "__main__":
         data["test_idx"],
         data["all_labels"],
         dataset_name=args.dataset,
+        seed=seed,
         class_names=class_names
     )
 
