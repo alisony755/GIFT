@@ -28,7 +28,6 @@ def evaluate(model, Z_org, idx, true_labels):
         preds = torch.argmax(logits, dim=1).cpu().numpy()
     labels = [true_labels[i] for i in idx]
     assert len(Z_org) == len(true_labels)
-    
     acc = accuracy_score(labels, preds)
     f1 = f1_score(labels, preds, average="macro")
     return acc, f1
@@ -136,9 +135,6 @@ def load_dataset(dataset_name):
     with open(idx_path) as f:
         idx_data = json.load(f)
 
-    print("IDX KEYS:", idx_data.keys())
-    print("IDX SAMPLE:", {k: v[:5] for k, v in idx_data.items()})
-
     all_texts, all_labels = [], []
 
     for i in sorted(split_data["train"].keys(), key=int):
@@ -146,6 +142,7 @@ def load_dataset(dataset_name):
         all_texts.append(doc["text"])
         all_labels.append(int(doc["label"]))
 
+    # Load test docs, appended after train
     for i in sorted(split_data["test"].keys(), key=int):
         doc = split_data["test"][i]
         all_texts.append(doc["text"])
@@ -154,7 +151,7 @@ def load_dataset(dataset_name):
     train_labeled_idx = idx_data["train"]
     val_idx = idx_data["valid"]
     test_idx = idx_data["test"]
-    
+
     # Remap labels to 0-indexed if they start at 1
     min_label = min(all_labels)
     if min_label > 0:
@@ -173,13 +170,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, required=True)
     parser.add_argument("--num_classes", type=int, default=2)
-    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
-    
-    # Ensure same results generated for same seed
-    torch.manual_seed(args.seed)
-    random.seed(args.seed)
-    np.random.seed(args.seed)
 
     # Load dataset
     data = load_dataset(args.dataset)
@@ -207,11 +198,10 @@ if __name__ == "__main__":
     labels_tensor = torch.tensor(all_labels, dtype=torch.long)
     print(f"Label distribution in train: {torch.bincount(labels_tensor[torch.tensor(train_labeled_idx)])}")
     print(f"Label distribution overall:  {torch.bincount(labels_tensor)}")
-    
+
     class_counts = torch.bincount(
         labels_tensor[torch.tensor(train_labeled_idx)]
     ).float()
-
     weights = 1.0 / class_counts
     weights = weights / weights.sum()
     print("Class weights:", weights)
@@ -228,9 +218,9 @@ if __name__ == "__main__":
         "projection_dim": 128,
         "eta": 0.5,
         "zeta": 0.5,
-        "batch_size": 256 * (args.num_classes // 2)
+        "batch_size": 256 * (args.num_classes // 2),
     }
-    
+
     trainer = GIFTTrainer(config)
 
     # Build graphs
@@ -260,16 +250,11 @@ if __name__ == "__main__":
     # Run SVD
     print("Running SVD...")
     M_wr, M_er, M_pr = trainer.run_svd(M_w, M_e, M_p)
-    
-    # SVD views
-    M_wr_t = torch.tensor(M_wr, dtype=torch.float32)
-    M_er_t = torch.tensor(M_er, dtype=torch.float32)
-    M_pr_t = torch.tensor(M_pr, dtype=torch.float32)
 
     # Convert TD matrices to tensors
-    M_w_t = torch.tensor(M_w,  dtype=torch.float32)
-    M_e_t = torch.tensor(M_e,  dtype=torch.float32)
-    M_p_t = torch.tensor(M_p,  dtype=torch.float32)
+    M_w_t  = torch.tensor(M_w,  dtype=torch.float32)
+    M_e_t  = torch.tensor(M_e,  dtype=torch.float32)
+    M_p_t  = torch.tensor(M_p,  dtype=torch.float32)
     M_wr_t = torch.tensor(M_wr, dtype=torch.float32)
     M_er_t = torch.tensor(M_er, dtype=torch.float32)
     M_pr_t = torch.tensor(M_pr, dtype=torch.float32)
@@ -290,23 +275,7 @@ if __name__ == "__main__":
         train_labeled_idx,
         train_labels_only
     )
-    
-    weak_labels_tensor = torch.full(
-        (len(weak_labels),),
-        -1,
-        dtype=torch.long
-    )
-
-    weak_labels_np = np.array(weak_labels)
-    cluster_counts = np.bincount(weak_labels_np[weak_labels_np >= 0])
-
-    for i, label in enumerate(weak_labels):
-        if label >= 0 and cluster_counts[label] < 0.9 * len(weak_labels):
-            weak_labels_tensor[i] = label
-
-    # Preserve true labels
-    for idx in train_labeled_idx:
-        weak_labels_tensor[idx] = labels_tensor[idx]
+    weak_labels_tensor = torch.tensor(weak_labels, dtype=torch.long)
 
     # Optimizer covers all trainable parameters
     optimizer = torch.optim.Adam(
@@ -314,15 +283,13 @@ if __name__ == "__main__":
         list(trainer.gcn_w.parameters()) +
         list(trainer.gcn_e.parameters()) +
         list(trainer.gcn_p.parameters()),
-        lr=1e-3, # Learning rate
+        lr=1e-3,  # Learning rate
     )
 
     metrics = {"train_loss": [], "val_acc": [], "val_f1": []}
-    print("Labeled sample classes:", labels_tensor[torch.tensor(train_labeled_idx)])
-    
     best_val_acc = 0
     num_epochs = 50
-    
+
     for epoch in range(num_epochs):
         # Training step
         trainer.model.train()
@@ -337,10 +304,7 @@ if __name__ == "__main__":
             M_w_t, M_e_t, M_p_t, M_wr_t, M_er_t, M_pr_t,
             H_w, H_e, H_p
         )
-        
-        Z_org.shape[1] == config["input_dim"]
-        print("Z_org shape:", Z_org.shape)
-        
+
         # Run k-means every epoch on current Z_org
         with torch.no_grad():
             weak_labels = trainer.run_kmeans(
@@ -397,13 +361,13 @@ if __name__ == "__main__":
                 "gcn_w": trainer.gcn_w.state_dict(),
                 "gcn_e": trainer.gcn_e.state_dict(),
                 "gcn_p": trainer.gcn_p.state_dict(),
-            }, f"saved_models/{args.dataset}_seed{args.seed}_gift_best.pt")
- 
+            }, f"saved_models/{args.dataset}_gift_best.pt")
+
         print(f"Epoch {epoch+1:02d} | Loss: {loss.item():.4f} | Val Acc: {val_acc:.4f} | Val F1: {val_f1:.4f} | Best: {best_val_acc:.4f}")
- 
+
     # Save results
     os.makedirs("results", exist_ok=True)
-    with open(f"results/{args.dataset}_seed{args.seed}_history.json", "w") as f:
+    with open(f"results/{args.dataset}_history.json", "w") as f:
         json.dump(metrics, f)
 
     # Save final model (separate from best)
@@ -413,7 +377,6 @@ if __name__ == "__main__":
         "gcn_w": trainer.gcn_w.state_dict(),
         "gcn_e": trainer.gcn_e.state_dict(),
         "gcn_p": trainer.gcn_p.state_dict(),
-    }, f"saved_models/{args.dataset}_seed{args.seed}_gift.pt")
+    }, f"saved_models/{args.dataset}_gift.pt")
     print(f"Training complete. Best val acc: {best_val_acc:.4f}")
     print("Models saved.")
- 

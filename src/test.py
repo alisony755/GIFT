@@ -1,4 +1,3 @@
-import glob
 import os
 import torch
 import json
@@ -6,6 +5,7 @@ import argparse
 from sklearn.metrics import accuracy_score, f1_score
 
 from src.train import load_dataset, load_pickle, GIFTTrainer
+
 
 def evaluate(model, Z_org, idx, true_labels):
     model.eval()
@@ -17,6 +17,7 @@ def evaluate(model, Z_org, idx, true_labels):
     acc = accuracy_score(labels, preds)
     f1 = f1_score(labels, preds, average="macro")
     return acc, f1
+
 
 def rebuild_embeddings(trainer, word_graph, entity_graph, pos_graph, all_texts, vocab, entities, pos):
     # Convert graph inputs to tensors
@@ -37,16 +38,16 @@ def rebuild_embeddings(trainer, word_graph, entity_graph, pos_graph, all_texts, 
         H_w, H_e, H_p = trainer.run_gcn(X_w, A_w, X_e, A_e, X_p, A_p)
         Z_org, _ = trainer.build_embeddings(
             M_w_t, M_e_t, M_p_t,
-            M_w_t, M_e_t, M_p_t,
+            M_w_t, M_e_t, M_p_t,  # Augmented view not needed for eval
             H_w, H_e, H_p
         )
     return Z_org
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, required=True)
     parser.add_argument("--num_classes", type=int, default=2)
-    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
     data = load_dataset(args.dataset)
@@ -68,8 +69,9 @@ if __name__ == "__main__":
         "projection_dim": 128,
         "eta": 0.5,
         "zeta": 0.5,
+        "batch_size": 256 * (args.num_classes // 2),
     }
-    
+
     BATCH_SIZES = {
         "MR": 256,
         "Twitter": 256,
@@ -83,13 +85,13 @@ if __name__ == "__main__":
     trainer.init_gcn(word_graph, entity_graph, pos_graph)
 
     # Load saved model weights
-    checkpoint = torch.load(f"saved_models/{args.dataset}_seed{args.seed}_gift_best.pt", weights_only=True)
+    checkpoint = torch.load(f"saved_models/{args.dataset}_gift_best.pt", weights_only=True)
     trainer.model.load_state_dict(checkpoint["model"], strict=True)
     trainer.gcn_w.load_state_dict(checkpoint["gcn_w"])
     trainer.gcn_e.load_state_dict(checkpoint["gcn_e"])
     trainer.gcn_p.load_state_dict(checkpoint["gcn_p"])
     print("Loaded saved model weights.")
-    
+
     trainer.model.eval()
     trainer.gcn_w.eval()
     trainer.gcn_e.eval()
@@ -111,15 +113,14 @@ if __name__ == "__main__":
 
     print(f"Test Accuracy: {acc*100:.2f}%")
     print(f"Test Macro-F1: {f1*100:.2f}%")
-    
-    # Save per-seed result
+
+    # Save result
     os.makedirs("results", exist_ok=True)
     result = {
-        "dataset": args.dataset,
-        "seed": args.seed,
+        "dataset":  args.dataset,
         "test_acc": acc,
-        "test_f1": f1
+        "test_f1":  f1,
     }
-    with open(f"results/{args.dataset}_seed{args.seed}_test.json", "w") as f:
+    with open(f"results/{args.dataset}_test.json", "w") as f:
         json.dump(result, f)
-    print(f"Saved result to results/{args.dataset}_seed{args.seed}_test.json")
+    print(f"Saved result to results/{args.dataset}_test.json")
